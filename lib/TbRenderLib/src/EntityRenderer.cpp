@@ -23,16 +23,19 @@
 #include "gl/PrimType.h"
 #include "gl/VertexType.h"
 #include "mdl/EditorContext.h"
+#include "mdl/DecalDefinition.h"
 #include "mdl/Entity.h"
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityModelManager.h"
 #include "mdl/EntityNode.h"
+#include "mdl/VisGroupManager.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
 #include "render/RenderService.h"
 #include "render/TextAnchor.h"
 
 #include "kd/ranges/to.h"
+#include "kd/result.h"
 
 #include "vm/mat.h"
 #include "vm/mat_ext.h"
@@ -288,7 +291,6 @@ void EntityRenderer::renderClassnames(
   if (m_showOverlays && renderContext.showEntityClassnames())
   {
     auto renderService = render::RenderService{renderContext, renderBatch};
-    renderService.setForegroundColor(m_overlayTextColor);
     renderService.setBackgroundColor(m_overlayBackgroundColor);
 
     for (const auto* entityNode : m_entities)
@@ -299,6 +301,17 @@ void EntityRenderer::renderClassnames(
           !entityNode->containingGroup()
           || entityNode->containingGroup() == m_editorContext.currentGroup())
         {
+          // tint the label by the entity's visgroup color, if any
+          auto textColor = m_overlayTextColor;
+          if (m_visGroupManager)
+          {
+            if (auto color = m_visGroupManager->nodeColor(entityNode))
+            {
+              textColor = *color;
+            }
+          }
+          renderService.setForegroundColor(textColor);
+
           if (m_showOccludedOverlays)
           {
             renderService.setShowOccludedObjects();
@@ -452,7 +465,13 @@ void EntityRenderer::validateBounds()
 
           const auto hasModel =
             entityNode->entity().model() && entityNode->entity().model()->data();
-          if (!hasModel)
+          // Decal entities (infodecal) draw a WIREFRAME-only marker so the projected
+          // decal isn't hidden behind an opaque box; skip the solid fill when a decal
+          // with an actual texture is present (a textureless decal keeps its box marker).
+          const auto hasDecal = entityNode->entity().decalSpecification()
+            | kdl::transform([](const auto& spec) { return !spec.materialName.empty(); })
+            | kdl::value_or(false);
+          if (!hasModel && !hasDecal)
           {
             entityNode->logicalBounds().for_each_face(
               makeColoredSolidBoundsVertexBuilder(solidVertices, m_boundsColor));
@@ -495,7 +514,11 @@ void EntityRenderer::validateBounds()
 
           const auto hasModel =
             entityNode->entity().model() && entityNode->entity().model()->data();
-          if (!hasModel)
+          // Decal entities: wireframe-only marker (see the other bounds pass above).
+          const auto hasDecal = entityNode->entity().decalSpecification()
+            | kdl::transform([](const auto& spec) { return !spec.materialName.empty(); })
+            | kdl::value_or(false);
+          if (!hasModel && !hasDecal)
           {
             entityNode->logicalBounds().for_each_face(makeColoredSolidBoundsVertexBuilder(
               solidVertices, boundsColor(*entityNode)));
@@ -536,8 +559,21 @@ gl::AttrString EntityRenderer::entityString(const mdl::EntityNode& entityNode) c
   return str;
 }
 
+void EntityRenderer::setVisGroupManager(const mdl::VisGroupManager* visGroupManager)
+{
+  m_visGroupManager = visGroupManager;
+}
+
 const Color& EntityRenderer::boundsColor(const mdl::EntityNode& entityNode) const
 {
+  if (m_visGroupManager)
+  {
+    if (auto color = m_visGroupManager->nodeColor(&entityNode))
+    {
+      m_visGroupBoundsColor = *color;
+      return m_visGroupBoundsColor;
+    }
+  }
   if (const auto* definition = entityNode.entity().definition())
   {
     return definition->color;

@@ -48,6 +48,7 @@ class EntityNode;
 class GroupNode;
 class Node;
 class PatchNode;
+class VisGroupManager;
 } // namespace mdl
 
 namespace render
@@ -114,6 +115,9 @@ public: // configuration
   void setBrushEdgeColor(const Color& brushEdgeColor);
 
   void setShowHiddenObjects(bool showHiddenObjects);
+
+  // Tint objects by their visgroup color (set on the default renderer only).
+  void setVisGroupManager(const mdl::VisGroupManager* visGroupManager);
 
 public: // rendering
   void renderOpaque(RenderContext& renderContext, RenderBatch& renderBatch);

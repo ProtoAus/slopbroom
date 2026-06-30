@@ -207,6 +207,12 @@ void ObjectRenderer::setShowHiddenObjects(const bool showHiddenObjects)
   m_brushRenderer.setShowHiddenBrushes(showHiddenObjects);
 }
 
+void ObjectRenderer::setVisGroupManager(const mdl::VisGroupManager* visGroupManager)
+{
+  m_entityRenderer.setVisGroupManager(visGroupManager);
+  m_brushRenderer.setVisGroupManager(visGroupManager);
+}
+
 void ObjectRenderer::renderOpaque(RenderContext& renderContext, RenderBatch& renderBatch)
 {
   m_brushRenderer.renderOpaque(renderContext, renderBatch);

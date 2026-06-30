@@ -54,6 +54,11 @@ class ResourceManager;
 struct ProcessContext;
 } // namespace gl
 
+namespace fs
+{
+class FileSystem;
+} // namespace fs
+
 namespace mdl
 {
 enum class MapFormat;
@@ -83,6 +88,7 @@ class PointTrace;
 class RepeatStack;
 class SmartTag;
 class TagManager;
+class VisGroupManager;
 class UndoableCommand;
 class UVCoordSystemSnapshot;
 class VertexHandleManager;
@@ -114,6 +120,7 @@ private:
   std::unique_ptr<EntityModelManager> m_entityModelManager;
   std::unique_ptr<gl::MaterialManager> m_materialManager;
   std::unique_ptr<TagManager> m_tagManager;
+  std::unique_ptr<VisGroupManager> m_visGroupManager;
 
   std::unique_ptr<EditorContext> m_editorContext;
   std::unique_ptr<Grid> m_grid;
@@ -155,6 +162,7 @@ public: // notification
   Notifier<> modificationStateDidChangeNotifier;
 
   Notifier<> editorContextDidChangeNotifier;
+  Notifier<> visGroupsDidChangeNotifier;
   Notifier<> currentLayerDidChangeNotifier;
   Notifier<> currentMaterialNameDidChangeNotifier;
 
@@ -213,6 +221,9 @@ public: // misc
 
   ~Map();
 
+  // defaultTextureScale, when set, overrides the texture scale of the auto-created
+  // starter brush (the UI passes the user's Preferences::DefaultTextureScale here so the
+  // very first brush on File>New honors it; the model layer stays preference-agnostic).
   static Result<std::unique_ptr<Map>> createMap(
     const EnvironmentConfig& environmentConfig,
     const GameInfo& gameInfo,
@@ -221,7 +232,8 @@ public: // misc
     const vm::bbox3d& worldBounds,
     kdl::task_manager& taskManager,
     gl::ResourceManager& resourceManager,
-    Logger& logger);
+    Logger& logger,
+    const std::optional<vm::vec2f>& defaultTextureScale = std::nullopt);
 
   static Result<std::unique_ptr<Map>> loadMap(
     const EnvironmentConfig& environmentConfig,
@@ -250,8 +262,15 @@ public: // misc
   gl::MaterialManager& materialManager();
   const gl::MaterialManager& materialManager() const;
 
+  // The mounted game virtual filesystem (gamedir + mods + paks). Read-only access for UI
+  // that needs to enumerate game files, e.g. the model picker listing models/ subfolders.
+  const fs::FileSystem& gameFileSystem() const;
+
   TagManager& tagManager();
   const TagManager& tagManager() const;
+
+  VisGroupManager& visGroupManager();
+  const VisGroupManager& visGroupManager() const;
 
   EditorContext& editorContext();
   const EditorContext& editorContext() const;
@@ -428,6 +447,12 @@ public: // command processing
 
   bool execute(std::unique_ptr<Command>&& command);
   bool executeAndStore(std::unique_ptr<UndoableCommand>&& command);
+
+private:
+  // Parse persisted _tb_visgroup_* properties from the just-loaded tree into the
+  // VisGroupManager, then strip them so the runtime tree carries no visgroup metadata.
+  // No-op for a new map. Runs once at construction, before connectObservers().
+  void loadVisGroups();
 
 private: // observers
   void connectObservers();

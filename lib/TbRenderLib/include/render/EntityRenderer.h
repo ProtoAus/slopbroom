@@ -40,6 +40,7 @@ class EditorContext;
 class EntityModel;
 class EntityModelManager;
 class EntityNode;
+class VisGroupManager;
 } // namespace mdl
 
 namespace render
@@ -72,6 +73,12 @@ private:
   bool m_showAngles = false;
   Color m_angleColor;
   bool m_showHiddenEntities = false;
+
+  // When set (on the default renderer), entity bounds + classname labels are tinted by the
+  // node's visgroup color. m_visGroupBoundsColor holds the per-call color so boundsColor()
+  // can return a const reference.
+  const mdl::VisGroupManager* m_visGroupManager = nullptr;
+  mutable Color m_visGroupBoundsColor;
 
 public:
   EntityRenderer(
@@ -128,6 +135,8 @@ public:
   void setAngleColor(const Color& angleColor);
 
   void setShowHiddenEntities(bool showHiddenEntities);
+
+  void setVisGroupManager(const mdl::VisGroupManager* visGroupManager);
 
 public: // rendering
   void render(RenderContext& renderContext, RenderBatch& renderBatch);

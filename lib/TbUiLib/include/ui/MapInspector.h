@@ -37,10 +37,15 @@ namespace tb::ui
 class CollapsibleTitledPanel;
 class MapDocument;
 
+class Splitter;
+
 class MapInspector : public TabBookPage
 {
   Q_OBJECT
 private:
+  Splitter* m_splitter = nullptr;
+  CollapsibleTitledPanel* m_visGroupEditor = nullptr;
+  CollapsibleTitledPanel* m_viewFilterPanel = nullptr;
   CollapsibleTitledPanel* m_mapPropertiesEditor = nullptr;
   CollapsibleTitledPanel* m_modEditor = nullptr;
 
@@ -51,6 +56,8 @@ public:
 private:
   void createGui(MapDocument& document);
   QWidget* createLayerEditor(MapDocument& document);
+  CollapsibleTitledPanel* createVisGroupEditor(MapDocument& document);
+  CollapsibleTitledPanel* createViewFilterPanel(MapDocument& document);
   CollapsibleTitledPanel* createMapPropertiesEditor(MapDocument& document);
   CollapsibleTitledPanel* createModEditor(MapDocument& document);
 };

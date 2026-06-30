@@ -30,7 +30,6 @@
 #include "mdl/Map.h"
 #include "mdl/Map_World.h"
 #include "mdl/WorldNode.h" // IWYU pragma: keep
-#include "ui/BorderLine.h"
 #include "ui/ClickableLabel.h"
 #include "ui/CollapsibleTitledPanel.h"
 #include "ui/LayerEditor.h"
@@ -38,8 +37,11 @@
 #include "ui/ModEditor.h"
 #include "ui/QStyleUtils.h"
 #include "ui/QVecUtils.h"
+#include "ui/Splitter.h"
 #include "ui/TitledPanel.h"
 #include "ui/ViewConstants.h"
+#include "ui/ViewFilterPanel.h"
+#include "ui/VisGroupEditor.h"
 #include "ui/WidgetState.h"
 
 #include <fmt/format.h>
@@ -92,25 +94,45 @@ MapInspector::MapInspector(MapDocument& document, QWidget* parent)
 
 MapInspector::~MapInspector()
 {
+  saveWidgetState(m_splitter);
+  saveWidgetState(m_visGroupEditor);
+  saveWidgetState(m_viewFilterPanel);
   saveWidgetState(m_mapPropertiesEditor);
   saveWidgetState(m_modEditor);
 }
 
 void MapInspector::createGui(MapDocument& document)
 {
+  m_visGroupEditor = createVisGroupEditor(document);
+  m_viewFilterPanel = createViewFilterPanel(document);
   m_mapPropertiesEditor = createMapPropertiesEditor(document);
   m_modEditor = createModEditor(document);
+
+  // A vertical splitter so each section is drag-resizable; its handles replace the old
+  // BorderLine separators, and the sizes persist via saveWidgetState/restoreWidgetState.
+  m_splitter = new Splitter{Qt::Vertical};
+  m_splitter->setObjectName("MapInspector_Splitter");
+
+  m_splitter->addWidget(createLayerEditor(document));
+  m_splitter->addWidget(m_visGroupEditor);
+  m_splitter->addWidget(m_viewFilterPanel);
+  m_splitter->addWidget(m_mapPropertiesEditor);
+  m_splitter->addWidget(m_modEditor);
+
+  // Layers absorbs extra space on a window resize; the rest keep their dragged sizes.
+  m_splitter->setStretchFactor(0, 1);
+  m_splitter->setStretchFactor(1, 0);
+  m_splitter->setStretchFactor(2, 0);
+  m_splitter->setStretchFactor(3, 0);
+  m_splitter->setStretchFactor(4, 0);
 
   auto* sizer = new QVBoxLayout{};
   sizer->setContentsMargins(0, 0, 0, 0);
   sizer->setSpacing(0);
-
-  sizer->addWidget(createLayerEditor(document), 1);
-  sizer->addWidget(new BorderLine{}, 0);
-  sizer->addWidget(m_mapPropertiesEditor, 0);
-  sizer->addWidget(new BorderLine{}, 0);
-  sizer->addWidget(m_modEditor, 0);
+  sizer->addWidget(m_splitter, 1);
   setLayout(sizer);
+
+  restoreWidgetState(m_splitter);
 }
 
 QWidget* MapInspector::createLayerEditor(MapDocument& document)
@@ -122,6 +144,40 @@ QWidget* MapInspector::createLayerEditor(MapDocument& document)
   sizer->setContentsMargins(0, 0, 0, 0);
   sizer->addWidget(layerEditor, 1);
   titledPanel->getPanel()->setLayout(sizer);
+
+  return titledPanel;
+}
+
+CollapsibleTitledPanel* MapInspector::createVisGroupEditor(MapDocument& document)
+{
+  auto* titledPanel = new CollapsibleTitledPanel{tr("VisGroups")};
+  titledPanel->setObjectName("MapInspector_VisGroupsPanel");
+
+  auto* editor = new VisGroupEditor{document};
+
+  auto* sizer = new QVBoxLayout{};
+  sizer->setContentsMargins(0, 0, 0, 0);
+  sizer->addWidget(editor, 1);
+  titledPanel->getPanel()->setLayout(sizer);
+
+  restoreWidgetState(titledPanel);
+
+  return titledPanel;
+}
+
+CollapsibleTitledPanel* MapInspector::createViewFilterPanel(MapDocument& document)
+{
+  auto* titledPanel = new CollapsibleTitledPanel{tr("Filter")};
+  titledPanel->setObjectName("MapInspector_FilterPanel");
+
+  auto* editor = new ViewFilterPanel{document};
+
+  auto* sizer = new QVBoxLayout{};
+  sizer->setContentsMargins(0, 0, 0, 0);
+  sizer->addWidget(editor, 1);
+  titledPanel->getPanel()->setLayout(sizer);
+
+  restoreWidgetState(titledPanel);
 
   return titledPanel;
 }

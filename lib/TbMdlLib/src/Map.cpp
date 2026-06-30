@@ -35,6 +35,7 @@
 #include "mdl/EmptyBrushEntityValidator.h"
 #include "mdl/EmptyGroupValidator.h"
 #include "mdl/EmptyPropertyKeyValidator.h"
+#include "mdl/DecalCollection.h"
 #include "mdl/EmptyPropertyValueValidator.h"
 #include "mdl/EntityDefinitionManager.h"
 #include "mdl/EntityDefinitionUtils.h"
@@ -52,6 +53,7 @@
 #include "mdl/LinkSourceValidator.h"
 #include "mdl/LinkTargetValidator.h"
 #include "mdl/LinkedGroupUtils.h"
+#include "mdl/LoadDecalMaterials.h"
 #include "mdl/LoadEntityDefinitions.h"
 #include "mdl/LoadMaterialCollections.h"
 #include "mdl/LongPropertyKeyValidator.h"
@@ -92,6 +94,7 @@
 #include "mdl/UpdateLinkedGroupsCommand.h"
 #include "mdl/UpdateLinkedGroupsHelper.h"
 #include "mdl/VertexHandleManager.h"
+#include "mdl/VisGroupManager.h"
 #include "mdl/WadPropertyUtils.h"
 #include "mdl/WorldBoundsValidator.h"
 #include "mdl/WorldNode.h"
@@ -111,7 +114,9 @@
 #include <cstdlib>
 #include <memory>
 #include <ranges>
+#include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 
@@ -204,7 +209,8 @@ Result<std::unique_ptr<WorldNode>> createWorldNode(
   const GameConfig& config,
   const vm::bbox3d& worldBounds,
   kdl::task_manager& taskManager,
-  Logger& logger)
+  Logger& logger,
+  const std::optional<vm::vec2f>& defaultTextureScale)
 {
   if (!config.forceEmptyNewMap)
   {
@@ -242,8 +248,13 @@ Result<std::unique_ptr<WorldNode>> createWorldNode(
 
   if (!config.forceEmptyNewMap)
   {
-    const auto builder = BrushBuilder{
-      worldNode->mapFormat(), worldBounds, config.faceAttribsConfig.defaults};
+    auto starterDefaults = config.faceAttribsConfig.defaults;
+    if (defaultTextureScale)
+    {
+      starterDefaults.setScale(*defaultTextureScale);
+    }
+    const auto builder =
+      BrushBuilder{worldNode->mapFormat(), worldBounds, std::move(starterDefaults)};
     builder.createCuboid({128.0, 128.0, 32.0}, BrushFaceAttributes::NoMaterialName)
       | kdl::transform(
         [&](auto b) { worldNode->defaultLayer()->addChild(new BrushNode{std::move(b)}); })
@@ -559,6 +570,7 @@ Map::Map(
       logger)}
   , m_materialManager{std::make_unique<gl::MaterialManager>(logger)}
   , m_tagManager{std::make_unique<TagManager>()}
+  , m_visGroupManager{std::make_unique<VisGroupManager>()}
   , m_editorContext{std::make_unique<EditorContext>()}
   , m_grid{std::make_unique<Grid>(4)}
   , m_worldNode{std::move(worldNode)}
@@ -574,9 +586,13 @@ Map::Map(
   , m_path{std::move(path)}
   , m_selection{*this}
 {
+  // Parse + strip persisted VisGroups before observers connect (so the strip doesn't notify).
+  loadVisGroups();
+
   connectObservers();
 
   editorContext().setCurrentLayer(m_worldNode->defaultLayer());
+  editorContext().setVisGroupManager(m_visGroupManager.get());
 
   entityModelManager().reloadShaders(m_taskManager);
 
@@ -591,6 +607,221 @@ Map::Map(
 
 Map::~Map() = default;
 
+namespace
+{
+std::set<IdType> parseVisGroupIds(const std::string& s)
+{
+  auto ids = std::set<IdType>{};
+  for (const auto& token : kdl::str_split(s, " "))
+  {
+    if (const auto id = kdl::str_to_size(token))
+    {
+      ids.insert(static_cast<IdType>(*id));
+    }
+  }
+  return ids;
+}
+} // namespace
+
+void Map::loadVisGroups()
+{
+  auto& world = *m_worldNode;
+  auto& manager = *m_visGroupManager;
+  manager.clear();
+
+  // --- 1. Parse worldspawn: group defs + the brush/group membership tables ---
+  auto brushTable = std::string{};
+  auto groupTable = std::string{};
+  for (const auto& property : world.entity().properties())
+  {
+    const auto& key = property.key();
+    if (property.hasPrefix(EntityPropertyKeys::TbVisGroupDefPrefix))
+    {
+      const auto id =
+        kdl::str_to_size(key.substr(EntityPropertyKeys::TbVisGroupDefPrefix.size()));
+      if (!id)
+      {
+        continue;
+      }
+      // value = "<visible> <rrggbb|none> <name>"; name is the rest after the 2nd space
+      const auto& value = property.value();
+      const auto firstSpace = value.find(' ');
+      const auto secondSpace = firstSpace == std::string::npos
+                                 ? std::string::npos
+                                 : value.find(' ', firstSpace + 1);
+      const auto visible =
+        firstSpace == std::string::npos || value.substr(0, firstSpace) != "0";
+      auto color = std::optional<Color>{};
+      if (firstSpace != std::string::npos && secondSpace != std::string::npos)
+      {
+        const auto colorToken =
+          value.substr(firstSpace + 1, secondSpace - firstSpace - 1);
+        if (colorToken != "none")
+        {
+          color = colorFromHex(colorToken);
+        }
+      }
+      auto name =
+        secondSpace == std::string::npos ? std::string{} : value.substr(secondSpace + 1);
+      manager.addGroup(
+        VisGroup{static_cast<IdType>(*id), std::move(name), std::move(color), visible});
+    }
+    else if (key == EntityPropertyKeys::TbVisGroupBrushes)
+    {
+      brushTable = property.value();
+    }
+    else if (key == EntityPropertyKeys::TbVisGroupGroups)
+    {
+      groupTable = property.value();
+    }
+  }
+
+  // --- 2. Build a containerId -> node map (0 = default layer) ---
+  auto containers = std::unordered_map<IdType, const Node*>{};
+  containers[IdType{0}] = world.defaultLayer();
+  world.accept(kdl::overload(
+    [&](auto&& thisLambda, const WorldNode& w) { w.visitChildren(thisLambda); },
+    [&](auto&& thisLambda, const LayerNode& l) {
+      if (const auto pid = l.persistentId())
+      {
+        containers[*pid] = &l;
+      }
+      l.visitChildren(thisLambda);
+    },
+    [&](auto&& thisLambda, const GroupNode& g) {
+      if (const auto pid = g.persistentId())
+      {
+        containers[*pid] = &g;
+      }
+      g.visitChildren(thisLambda);
+    },
+    [](const EntityNode&) {},
+    [](const BrushNode&) {},
+    [](const PatchNode&) {}));
+
+  // --- 3. Resolve the raw brush/patch table: "cid/ord=ids;..." ---
+  for (const auto& entry : kdl::str_split(brushTable, ";"))
+  {
+    const auto eq = entry.find('=');
+    if (eq == std::string::npos)
+    {
+      continue;
+    }
+    const auto address = entry.substr(0, eq);
+    const auto ids = parseVisGroupIds(entry.substr(eq + 1));
+    const auto slash = address.find('/');
+    if (slash == std::string::npos)
+    {
+      continue;
+    }
+    const auto cid = kdl::str_to_size(address.substr(0, slash));
+    const auto ord = kdl::str_to_size(address.substr(slash + 1));
+    if (!cid || !ord)
+    {
+      continue;
+    }
+    const auto it = containers.find(static_cast<IdType>(*cid));
+    if (it == containers.end())
+    {
+      m_logger.warn() << "VisGroups: dropping membership for unknown container " << *cid;
+      continue;
+    }
+    const Node* target = nullptr;
+    auto count = size_t{0};
+    for (const auto* child : it->second->children())
+    {
+      if (dynamic_cast<const BrushNode*>(child) != nullptr
+          || dynamic_cast<const PatchNode*>(child) != nullptr)
+      {
+        if (count == *ord)
+        {
+          target = child;
+          break;
+        }
+        ++count;
+      }
+    }
+    if (target != nullptr)
+    {
+      manager.setMembership(target, ids);
+    }
+    else
+    {
+      m_logger.warn() << "VisGroups: dropping membership for missing brush " << *cid << "/"
+                      << *ord;
+    }
+  }
+
+  // --- 4. Resolve the GroupNode table: "gid=ids;..." (gid = group persistentId) ---
+  for (const auto& entry : kdl::str_split(groupTable, ";"))
+  {
+    const auto eq = entry.find('=');
+    if (eq == std::string::npos)
+    {
+      continue;
+    }
+    const auto gid = kdl::str_to_size(entry.substr(0, eq));
+    const auto ids = parseVisGroupIds(entry.substr(eq + 1));
+    if (!gid)
+    {
+      continue;
+    }
+    const auto it = containers.find(static_cast<IdType>(*gid));
+    if (it != containers.end() && dynamic_cast<const GroupNode*>(it->second) != nullptr)
+    {
+      manager.setMembership(it->second, ids);
+    }
+    else
+    {
+      m_logger.warn() << "VisGroups: dropping membership for unknown group " << *gid;
+    }
+  }
+
+  // --- 5. Inline _tb_visgroups on entities: read into the manager, then strip ---
+  world.accept(kdl::overload(
+    [&](auto&& thisLambda, WorldNode& w) { w.visitChildren(thisLambda); },
+    [&](auto&& thisLambda, LayerNode& l) { l.visitChildren(thisLambda); },
+    [&](auto&& thisLambda, GroupNode& g) { g.visitChildren(thisLambda); },
+    [&](EntityNode& e) {
+      const auto* value = e.entity().property(EntityPropertyKeys::TbVisGroups);
+      if (value == nullptr)
+      {
+        return;
+      }
+      const auto ids = parseVisGroupIds(*value);
+      if (!ids.empty())
+      {
+        manager.setMembership(&e, ids);
+      }
+      auto entity = e.entity();
+      entity.removeProperty(EntityPropertyKeys::TbVisGroups);
+      e.setEntity(std::move(entity));
+    },
+    [](BrushNode&) {},
+    [](PatchNode&) {}));
+
+  // --- 6. Strip the worldspawn defs/tables (runtime tree carries no visgroup metadata) ---
+  auto worldEntity = world.entity();
+  auto keysToRemove = std::vector<std::string>{};
+  for (const auto& property : worldEntity.properties())
+  {
+    if (property.hasPrefix(EntityPropertyKeys::TbVisGroupDefPrefix)
+        || property.key() == EntityPropertyKeys::TbVisGroupBrushes
+        || property.key() == EntityPropertyKeys::TbVisGroupGroups)
+    {
+      keysToRemove.push_back(property.key());
+    }
+  }
+  if (!keysToRemove.empty())
+  {
+    for (const auto& key : keysToRemove)
+    {
+      worldEntity.removeProperty(key);
+    }
+    world.setEntity(std::move(worldEntity));
+  }
+}
+
 Result<std::unique_ptr<Map>> Map::createMap(
   const EnvironmentConfig& environmentConfig,
   const GameInfo& gameInfo,
@@ -599,11 +830,18 @@ Result<std::unique_ptr<Map>> Map::createMap(
   const vm::bbox3d& worldBounds,
   kdl::task_manager& taskManager,
   gl::ResourceManager& resourceManager,
-  Logger& logger)
+  Logger& logger,
+  const std::optional<vm::vec2f>& defaultTextureScale)
 {
   logger.info() << "Creating new document";
 
-  return createWorldNode(mapFormat, gameInfo.gameConfig, worldBounds, taskManager, logger)
+  return createWorldNode(
+           mapFormat,
+           gameInfo.gameConfig,
+           worldBounds,
+           taskManager,
+           logger,
+           defaultTextureScale)
          | kdl::transform([&](auto worldNode) {
              return std::make_unique<Map>(
                environmentConfig,
@@ -701,6 +939,11 @@ const gl::MaterialManager& Map::materialManager() const
   return *m_materialManager;
 }
 
+const fs::FileSystem& Map::gameFileSystem() const
+{
+  return *m_gameFileSystem;
+}
+
 TagManager& Map::tagManager()
 {
   return *m_tagManager;
@@ -709,6 +952,16 @@ TagManager& Map::tagManager()
 const TagManager& Map::tagManager() const
 {
   return *m_tagManager;
+}
+
+VisGroupManager& Map::visGroupManager()
+{
+  return *m_visGroupManager;
+}
+
+const VisGroupManager& Map::visGroupManager() const
+{
+  return *m_visGroupManager;
 }
 
 EditorContext& Map::editorContext()
@@ -888,6 +1141,7 @@ Result<void> Map::saveTo(const std::filesystem::path& path) const
 
     auto writer = NodeWriter{*m_worldNode, stream};
     writer.setExporting(false);
+    writer.setVisGroupManager(m_visGroupManager.get());
     writer.writeMap(m_taskManager);
   }) | kdl::transform_error([&](const auto& e) {
     m_logger.error() << "Could not save document: " << e.msg;
@@ -918,6 +1172,7 @@ Result<void> Map::exportAs(const ExportOptions& options) const
           auto writer = NodeWriter{*m_worldNode, stream};
           writer.setExporting(true);
           writer.setStripTbProperties(mapOptions.stripTbProperties);
+          writer.setVisGroupManager(m_visGroupManager.get());
           writer.writeMap(m_taskManager);
         });
       }),
@@ -1258,6 +1513,21 @@ void Map::loadMaterials()
     taskManager(),
     m_logger)
     | kdl::transform([&](auto materialCollections) {
+        // Also load loose decal images from gfx/decals as a dedicated collection, so the
+        // infodecal picker lists them and they render in the viewport. Loaded LAST so it
+        // wins any material-name clash with a mounted decals.wad. A missing/empty folder
+        // just warns. See loadDecalMaterialCollection for the brace-name convention.
+        loadDecalMaterialCollection(
+          *m_gameFileSystem,
+          DecalMaterialCollectionPath,
+          makeCreateResource<gl::TextureResource>(m_resourceManager))
+          | kdl::transform([&](auto decalCollection) {
+              materialCollections.push_back(std::move(decalCollection));
+            })
+          | kdl::transform_error([&](auto e) {
+              m_logger.warn() << "Could not load decal materials: " + e.msg;
+            });
+
         m_materialManager->setMaterialCollections(std::move(materialCollections));
       })
     | kdl::transform_error([&](auto e) {
@@ -1688,6 +1958,10 @@ void Map::nodesWillBeRemoved(const std::vector<Node*>& nodes)
   removeEntityLinks(nodes, true);
   removeFromNodeIndex(nodes, true);
   clearNodeTags(nodes);
+  for (auto* node : nodes)
+  {
+    m_visGroupManager->nodeWillBeRemoved(node);
+  }
 }
 
 void Map::nodesWereRemoved(const std::vector<Node*>& nodes)

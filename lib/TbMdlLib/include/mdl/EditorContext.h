@@ -36,6 +36,7 @@ class LayerNode;
 class Node;
 class Object;
 class PatchNode;
+class VisGroupManager;
 class WorldNode;
 
 class EditorContext
@@ -44,8 +45,15 @@ private:
   TagType::Type m_hiddenTags = 0;
   kdl::dynamic_bitset m_hiddenEntityDefinitions;
 
+  // Non-owning. The VisGroup filter: a node is hidden if it belongs to any visgroup whose
+  // visible flag is off (see hiddenByVisGroup + the visible() overloads). Owned by Map.
+  const VisGroupManager* m_visGroups = nullptr;
+
   bool m_showPointEntities = true;
   bool m_showBrushes = true;
+  // When false, hide only WORLD/structural brushes (those NOT owned by a brush entity),
+  // leaving func_*/trigger_* entity brushes visible. Pure view state, not pref-backed.
+  bool m_showWorldBrushes = true;
 
   bool m_blockSelection = false;
 
@@ -66,6 +74,8 @@ public:
   TagType::Type hiddenTags() const;
   void setHiddenTags(TagType::Type hiddenTags);
 
+  void setVisGroupManager(const VisGroupManager* visGroups);
+
   bool entityDefinitionHidden(const EntityNodeBase& entityNode) const;
   bool entityDefinitionHidden(const EntityDefinition& definition) const;
   void setEntityDefinitionHidden(const EntityDefinition& definition, bool hidden);
@@ -75,6 +85,9 @@ public:
 
   bool showBrushes() const;
   void setShowBrushes(bool showBrushes);
+
+  bool showWorldBrushes() const;
+  void setShowWorldBrushes(bool showWorldBrushes);
 
   bool blockSelection() const;
   void setBlockSelection(bool blockSelection);
@@ -106,6 +119,7 @@ public:
 
 private:
   bool anyChildVisible(const Node& node) const;
+  bool hiddenByVisGroup(const Node& node) const;
 
 public:
   bool editable(const Node& node) const;

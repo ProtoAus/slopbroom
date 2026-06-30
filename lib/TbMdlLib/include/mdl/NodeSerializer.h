@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include "mdl/EntityProperties.h" // for EntityProperty (stored by value in a member)
+
 #include <string>
 #include <vector>
 
@@ -31,7 +33,6 @@ namespace tb::mdl
 {
 class BrushNode;
 class BrushFace;
-class EntityProperty;
 class GroupNode;
 class LayerNode;
 class Node;
@@ -63,6 +64,7 @@ private:
   ObjectNo m_brushNo = 0;
   bool m_exporting = false;
   bool m_stripTbProperties = false;
+  std::vector<EntityProperty> m_visGroupWorldProperties;
 
 public:
   virtual ~NodeSerializer();
@@ -77,6 +79,10 @@ public:
 
   bool stripTbProperties() const;
   void setStripTbProperties(bool stripTbProperties);
+
+  // Extra _tb_visgroup_* properties to append to worldspawn (the VisGroup definitions + the
+  // raw-brush membership table). Set by NodeWriter before writing; appended in defaultLayer.
+  void setVisGroupWorldProperties(std::vector<EntityProperty> properties);
 
 public:
   /**

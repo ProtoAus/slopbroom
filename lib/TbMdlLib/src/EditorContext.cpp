@@ -28,6 +28,7 @@
 #include "mdl/LayerNode.h"
 #include "mdl/Node.h"
 #include "mdl/PatchNode.h"
+#include "mdl/VisGroupManager.h"
 #include "mdl/WorldNode.h"
 
 #include "kd/contracts.h"
@@ -58,6 +59,20 @@ void EditorContext::setHiddenTags(const TagType::Type hiddenTags)
     m_hiddenTags = hiddenTags;
     editorContextDidChangeNotifier();
   }
+}
+
+void EditorContext::setVisGroupManager(const VisGroupManager* visGroups)
+{
+  if (visGroups != m_visGroups)
+  {
+    m_visGroups = visGroups;
+    editorContextDidChangeNotifier();
+  }
+}
+
+bool EditorContext::hiddenByVisGroup(const Node& node) const
+{
+  return m_visGroups != nullptr && m_visGroups->isHidden(node);
 }
 
 bool EditorContext::entityDefinitionHidden(const EntityNodeBase& entityNode) const
@@ -99,6 +114,22 @@ bool EditorContext::showBrushes() const
 void EditorContext::setShowBrushes(const bool showBrushes)
 {
   m_showBrushes = showBrushes;
+}
+
+bool EditorContext::showWorldBrushes() const
+{
+  return m_showWorldBrushes;
+}
+
+void EditorContext::setShowWorldBrushes(const bool showWorldBrushes)
+{
+  // Unlike setShowBrushes/setShowPointEntities (whose redraw is driven by their backing
+  // preference), this flag is editor-context-only, so it must fire the notifier itself.
+  if (m_showWorldBrushes != showWorldBrushes)
+  {
+    m_showWorldBrushes = showWorldBrushes;
+    editorContextDidChangeNotifier();
+  }
 }
 
 bool EditorContext::blockSelection() const
@@ -201,6 +232,10 @@ bool EditorContext::visible(const GroupNode& groupNode) const
   {
     return true;
   }
+  if (hiddenByVisGroup(groupNode))
+  {
+    return false;
+  }
   if (!anyChildVisible(groupNode))
   {
     return false;
@@ -213,6 +248,11 @@ bool EditorContext::visible(const EntityNode& entityNode) const
   if (entityNode.selected())
   {
     return true;
+  }
+
+  if (hiddenByVisGroup(entityNode))
+  {
+    return false;
   }
 
   if (!entityNode.entity().pointEntity())
@@ -245,7 +285,29 @@ bool EditorContext::visible(const BrushNode& brushNode) const
     return true;
   }
 
+  if (hiddenByVisGroup(brushNode))
+  {
+    return false;
+  }
+
+  // A brush owned by a brush entity (func_*, trigger_*) carries no visgroup membership of its
+  // own — only the entity does — so hide it when that entity's visgroup is off. The cast to
+  // EntityNode keeps WORLD brushes (whose entity() is the WorldNode) out of this entirely;
+  // they hide only via their own membership above.
+  if (const auto* entityNode = dynamic_cast<const EntityNode*>(brushNode.entity());
+      entityNode && hiddenByVisGroup(*entityNode))
+  {
+    return false;
+  }
+
   if (!m_showBrushes)
+  {
+    return false;
+  }
+
+  // Hide world/structural brushes only: a brush owned by a real brush entity (func_*, etc.)
+  // reports an EntityNode here; a world brush reports the WorldNode (→ dynamic_cast null).
+  if (!m_showWorldBrushes && dynamic_cast<const EntityNode*>(brushNode.entity()) == nullptr)
   {
     return false;
   }
@@ -279,6 +341,17 @@ bool EditorContext::visible(const PatchNode& patchNode) const
   if (patchNode.selected())
   {
     return true;
+  }
+
+  if (hiddenByVisGroup(patchNode))
+  {
+    return false;
+  }
+
+  if (const auto* entityNode = dynamic_cast<const EntityNode*>(patchNode.entity());
+      entityNode && hiddenByVisGroup(*entityNode))
+  {
+    return false;
   }
 
   if (patchNode.hasTag(m_hiddenTags))

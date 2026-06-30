@@ -64,6 +64,18 @@ inline const std::string TbMessage = TbPrefix + "message";
 inline const std::string TbMods = TbPrefix + "mod";
 inline const std::string TbProtectedEntityProperties = TbPrefix + "protected_properties";
 inline const std::string TbSoftMapBounds = TbPrefix + "soft_map_bounds";
+// VisGroups (Hammer-style visibility groups) persistence:
+//   _tb_visgroups            inline on an ENTITY node = space-separated group ids it belongs to
+//                            (survives createEntityNode; entities have no persistent id so this
+//                            is their only handle)
+//   _tb_visgroup_brushes     worldspawn = raw brush/patch table "cid/ord=g g;..." (cid=0 default layer)
+//   _tb_visgroup_groups      worldspawn = GroupNode membership "gid=g g;..." (gid = group persistentId;
+//                            a GroupNode drops arbitrary props on read, so it can't be inline)
+//   _tb_visgroup_def_<id>    worldspawn = one per group, value "<visible> <rrggbb> <name>"
+inline const std::string TbVisGroups = TbPrefix + "visgroups";
+inline const std::string TbVisGroupBrushes = TbPrefix + "visgroup_brushes";
+inline const std::string TbVisGroupGroups = TbPrefix + "visgroup_groups";
+inline const std::string TbVisGroupDefPrefix = TbPrefix + "visgroup_def_";
 } // namespace EntityPropertyKeys
 
 namespace EntityPropertyValues

@@ -44,6 +44,7 @@ namespace mdl
 class BrushNode;
 class BrushFace;
 class EditorContext;
+class VisGroupManager;
 } // namespace mdl
 
 namespace render
@@ -161,6 +162,7 @@ private:
   FaceRenderer m_opaqueFaceRenderer;
   FaceRenderer m_transparentFaceRenderer;
   IndexedEdgeRenderer m_edgeRenderer;
+  DirectEdgeRenderer m_coloredEdgeRenderer; // visgroup-colored wireframe (per-vertex color)
 
   Color m_faceColor;
   bool m_showEdges = false;
@@ -174,6 +176,10 @@ private:
   float m_transparencyAlpha = 1.0f;
 
   bool m_showHiddenBrushes = false;
+
+  // When set, brushes with a visgroup color render their edges in that color (via the colored
+  // edge renderer) and are excluded from the uniform-color m_edgeRenderer.
+  const mdl::VisGroupManager* m_visGroupManager = nullptr;
 
 public:
   template <typename FilterT>
@@ -207,6 +213,8 @@ public:
   void invalidate();
   void invalidateMaterials(const std::vector<const gl::Material*>& materials);
   void invalidateBrush(const mdl::BrushNode& brush);
+
+  void setVisGroupManager(const mdl::VisGroupManager* visGroupManager);
   void invalidateMaterial(const gl::Material& material);
   bool valid() const;
 

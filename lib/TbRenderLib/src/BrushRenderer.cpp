@@ -20,6 +20,7 @@
 #include "render/BrushRenderer.h"
 
 #include "gl/Material.h"
+#include "gl/VertexType.h"
 #include "mdl/Brush.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
@@ -27,6 +28,7 @@
 #include "mdl/EditorContext.h"
 #include "mdl/Polyhedron.h"
 #include "mdl/TagAttribute.h"
+#include "mdl/VisGroupManager.h"
 #include "render/BrushRendererArrays.h"
 #include "render/RenderContext.h"
 
@@ -368,6 +370,11 @@ void BrushRenderer::renderTransparentFaces(RenderBatch& renderBatch)
   m_transparentFaceRenderer.render(renderBatch);
 }
 
+void BrushRenderer::setVisGroupManager(const mdl::VisGroupManager* visGroupManager)
+{
+  m_visGroupManager = visGroupManager;
+}
+
 void BrushRenderer::renderEdges(RenderBatch& renderBatch)
 {
   if (m_showOccludedEdges)
@@ -375,6 +382,8 @@ void BrushRenderer::renderEdges(RenderBatch& renderBatch)
     m_edgeRenderer.renderOnTop(renderBatch, m_occludedEdgeColor);
   }
   m_edgeRenderer.render(renderBatch, m_edgeColor);
+  // Visgroup-colored brush wireframe: per-vertex colors (false = don't override uniformly).
+  m_coloredEdgeRenderer.render(renderBatch, false, m_edgeColor);
 }
 
 void BrushRenderer::validate()
@@ -393,6 +402,34 @@ void BrushRenderer::validate()
   m_transparentFaceRenderer =
     FaceRenderer{m_vertexArray, m_transparentFaces, m_faceColor};
   m_edgeRenderer = IndexedEdgeRenderer{m_vertexArray, m_edgeIndices};
+
+  // Build the visgroup-colored wireframe: bake each tinted brush's color into its edge
+  // vertices (per-vertex P3C4), so one DirectEdgeRenderer draws them all. Tinted brushes were
+  // excluded from m_edgeRenderer in validateBrush so they are not drawn twice.
+  if (m_visGroupManager != nullptr)
+  {
+    auto coloredVertices = std::vector<gl::VertexTypes::P3C4::Vertex>{};
+    for (const auto& [brushNode, info] : m_brushInfo)
+    {
+      if (const auto color = m_visGroupManager->nodeColor(brushNode))
+      {
+        const auto colorVec = color->to<RgbaF>().toVec();
+        for (const auto* edge : brushNode->brush().edges())
+        {
+          coloredVertices.emplace_back(
+            vm::vec3f{edge->firstVertex()->position()}, colorVec);
+          coloredVertices.emplace_back(
+            vm::vec3f{edge->secondVertex()->position()}, colorVec);
+        }
+      }
+    }
+    m_coloredEdgeRenderer = DirectEdgeRenderer{
+      gl::VertexArray::move(std::move(coloredVertices)), gl::PrimType::Lines};
+  }
+  else
+  {
+    m_coloredEdgeRenderer = DirectEdgeRenderer{};
+  }
 }
 
 static size_t triIndicesCountForPolygon(const size_t vertexCount)
@@ -546,9 +583,13 @@ void BrushRenderer::validateBrush(const mdl::BrushNode& brushNode)
 
   const auto brushVerticesStartIndex = static_cast<GLuint>(vertBlock->pos);
 
-  // insert edge indices into VBO
+  // insert edge indices into VBO — but skip brushes with a visgroup color; their edges are
+  // drawn (in that color) by m_coloredEdgeRenderer instead, so they aren't drawn twice.
   {
-    const auto edgeIndexCount = countMarkedEdgeIndices(brushNode, edgePolicy);
+    const auto tinted =
+      m_visGroupManager != nullptr && m_visGroupManager->nodeColor(&brushNode).has_value();
+    const auto edgeIndexCount =
+      tinted ? size_t{0} : countMarkedEdgeIndices(brushNode, edgePolicy);
     if (edgeIndexCount > 0)
     {
       auto [key, insertDest] =

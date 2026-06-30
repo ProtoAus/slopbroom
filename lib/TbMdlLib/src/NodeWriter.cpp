@@ -22,12 +22,14 @@
 #include "mdl/BrushNode.h"
 #include "mdl/Entity.h"
 #include "mdl/EntityNode.h"
+#include "mdl/EntityProperties.h"
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
 #include "mdl/MapFileSerializer.h"
 #include "mdl/Node.h"
 #include "mdl/NodeSerializer.h"
 #include "mdl/PatchNode.h"
+#include "mdl/VisGroupManager.h"
 #include "mdl/WorldNode.h"
 
 #include "kd/contracts.h"
@@ -37,6 +39,9 @@
 #include "kd/string_utils.h"
 #include "kd/vector_utils.h"
 
+#include <optional>
+#include <set>
+#include <string>
 #include <vector>
 
 namespace tb::mdl
@@ -44,9 +49,127 @@ namespace tb::mdl
 namespace
 {
 
+std::string joinVisGroupIds(const std::set<IdType>& ids)
+{
+  auto strs = std::vector<std::string>{};
+  strs.reserve(ids.size());
+  for (const auto id : ids)
+  {
+    strs.push_back(kdl::str_to_string(id));
+  }
+  return kdl::str_join(strs, " ");
+}
+
+// Append the inline "_tb_visgroups" membership property to an entity/group's properties.
+void appendVisGroups(
+  std::vector<EntityProperty>& properties,
+  const Node& node,
+  const VisGroupManager* visGroups)
+{
+  if (visGroups)
+  {
+    const auto ids = visGroups->membership(&node);
+    if (!ids.empty())
+    {
+      properties.emplace_back(EntityPropertyKeys::TbVisGroups, joinVisGroupIds(ids));
+    }
+  }
+}
+
+// Build the worldspawn VisGroup properties: one "_tb_visgroup_def_<id>" per group plus the
+// raw-brush membership table "_tb_visgroup_brushes". Entities/groups carry their membership
+// inline (see appendVisGroups), so only raw brushes/patches go in the table. A brush whose
+// parent is a brush-entity has no stable address and is dropped (documented limitation).
+std::vector<EntityProperty> precomputeWorldVisGroupProperties(
+  const WorldNode& world, const VisGroupManager& visGroups)
+{
+  auto properties = std::vector<EntityProperty>{};
+
+  for (const auto& group : visGroups.groups())
+  {
+    // "<visible> <rrggbb|none> <name>" — colour is a single token so the name can stay free
+    // trailing text; "none" marks a group with no assigned colour.
+    const auto colorStr = group.color ? colorToHex(*group.color) : std::string{"none"};
+    auto value =
+      std::string{group.visible ? "1" : "0"} + " " + colorStr + " " + group.name;
+    properties.emplace_back(
+      EntityPropertyKeys::TbVisGroupDefPrefix + kdl::str_to_string(group.id),
+      std::move(value));
+  }
+
+  auto brushEntries = std::vector<std::string>{};
+  auto groupEntries = std::vector<std::string>{};
+  for (const auto& [node, ids] : visGroups.allMemberships())
+  {
+    // A GroupNode drops arbitrary props on read, so it can't be inline → its own table,
+    // keyed by persistentId (no ordinal — the id is already unique).
+    if (const auto* groupNode = dynamic_cast<const GroupNode*>(node))
+    {
+      if (const auto pid = groupNode->persistentId())
+      {
+        groupEntries.push_back(kdl::str_to_string(*pid) + "=" + joinVisGroupIds(ids));
+      }
+      continue;
+    }
+
+    const auto isGeometry = dynamic_cast<const BrushNode*>(node) != nullptr
+                            || dynamic_cast<const PatchNode*>(node) != nullptr;
+    if (!isGeometry)
+    {
+      continue; // entities carry inline _tb_visgroups (see appendVisGroups)
+    }
+
+    const auto* parent = node->parent();
+    auto cid = std::optional<IdType>{};
+    if (const auto* layer = dynamic_cast<const LayerNode*>(parent))
+    {
+      cid = (layer == world.defaultLayer()) ? IdType{0} : layer->persistentId().value_or(0);
+    }
+    else if (const auto* groupNode = dynamic_cast<const GroupNode*>(parent))
+    {
+      cid = groupNode->persistentId();
+    }
+    if (!cid)
+    {
+      continue; // brush is a child of a brush-entity → not addressable, drop
+    }
+
+    auto ord = size_t{0};
+    for (const auto* sibling : parent->children())
+    {
+      if (sibling == node)
+      {
+        break;
+      }
+      if (dynamic_cast<const BrushNode*>(sibling) != nullptr
+          || dynamic_cast<const PatchNode*>(sibling) != nullptr)
+      {
+        ++ord;
+      }
+    }
+
+    brushEntries.push_back(
+      kdl::str_to_string(*cid) + "/" + kdl::str_to_string(ord) + "="
+      + joinVisGroupIds(ids));
+  }
+  if (!brushEntries.empty())
+  {
+    properties.emplace_back(
+      EntityPropertyKeys::TbVisGroupBrushes, kdl::str_join(brushEntries, ";"));
+  }
+  if (!groupEntries.empty())
+  {
+    properties.emplace_back(
+      EntityPropertyKeys::TbVisGroupGroups, kdl::str_join(groupEntries, ";"));
+  }
+
+  return properties;
+}
+
 void doWriteNodes(
   NodeSerializer& serializer,
   const std::vector<Node*>& nodes,
+  const VisGroupManager* visGroups,
   const Node* parent = nullptr)
 {
   auto parentStack = std::vector<const Node*>{parent};
@@ -62,7 +185,9 @@ void doWriteNodes(
       [](const WorldNode&) {},
       [](const LayerNode&) {},
       [&](auto&& thisLambda, const GroupNode& groupNode) {
-        serializer.group(groupNode, parentProperties());
+        auto properties = parentProperties();
+        appendVisGroups(properties, groupNode, visGroups);
+        serializer.group(groupNode, properties);
 
         parentStack.push_back(&groupNode);
         groupNode.visitChildren(thisLambda);
@@ -82,6 +207,7 @@ void doWriteNodes(
             EntityPropertyKeys::TbProtectedEntityProperties,
             kdl::str_join(escapedProperties, ";"));
         }
+        appendVisGroups(extraProperties, entityNode, visGroups);
         serializer.entity(
           entityNode, entityNode.entity().properties(), extraProperties, entityNode);
       },
@@ -115,9 +241,19 @@ void NodeWriter::setStripTbProperties(const bool stripTbProperties)
   m_serializer->setStripTbProperties(stripTbProperties);
 }
 
+void NodeWriter::setVisGroupManager(const VisGroupManager* visGroups)
+{
+  m_visGroupManager = visGroups;
+}
+
 void NodeWriter::writeMap(kdl::task_manager& taskManager)
 {
   m_serializer->beginFile({&m_world}, taskManager);
+  if (m_visGroupManager != nullptr && !m_visGroupManager->groups().empty())
+  {
+    m_serializer->setVisGroupWorldProperties(
+      precomputeWorldVisGroupProperties(m_world, *m_visGroupManager));
+  }
   writeDefaultLayer();
   writeCustomLayers();
   m_serializer->endFile();
@@ -129,7 +265,7 @@ void NodeWriter::writeDefaultLayer()
 
   if (!(m_serializer->exporting() && m_world.defaultLayer()->layer().omitFromExport()))
   {
-    doWriteNodes(*m_serializer, m_world.defaultLayer()->children());
+    doWriteNodes(*m_serializer, m_world.defaultLayer()->children(), m_visGroupManager);
   }
 }
 
@@ -146,7 +282,7 @@ void NodeWriter::writeCustomLayer(const LayerNode& layerNode)
   if (!(m_serializer->exporting() && layerNode.layer().omitFromExport()))
   {
     m_serializer->customLayer(layerNode);
-    doWriteNodes(*m_serializer, layerNode.children(), &layerNode);
+    doWriteNodes(*m_serializer, layerNode.children(), m_visGroupManager, &layerNode);
   }
 }
 
@@ -185,8 +321,8 @@ void NodeWriter::writeNodes(
   writeWorldBrushes(worldBrushes);
   writeEntityBrushes(entityBrushes);
 
-  doWriteNodes(*m_serializer, groups);
-  doWriteNodes(*m_serializer, entities);
+  doWriteNodes(*m_serializer, groups, nullptr);
+  doWriteNodes(*m_serializer, entities, nullptr);
 
   m_serializer->endFile();
 }

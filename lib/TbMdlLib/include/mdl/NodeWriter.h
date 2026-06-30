@@ -38,6 +38,7 @@ class EntityNode;
 class LayerNode;
 class Node;
 class NodeSerializer;
+class VisGroupManager;
 class WorldNode;
 
 class NodeWriter
@@ -47,6 +48,7 @@ private:
 
   const WorldNode& m_world;
   std::unique_ptr<NodeSerializer> m_serializer;
+  const VisGroupManager* m_visGroupManager = nullptr;
 
 public:
   NodeWriter(const WorldNode& world, std::ostream& stream);
@@ -55,6 +57,7 @@ public:
 
   void setExporting(bool exporting);
   void setStripTbProperties(bool stripTbProperties);
+  void setVisGroupManager(const VisGroupManager* visGroups);
   void writeMap(kdl::task_manager& taskManager);
 
 private:

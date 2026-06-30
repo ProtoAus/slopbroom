@@ -74,6 +74,11 @@ void NodeSerializer::setStripTbProperties(const bool stripTbProperties)
   m_stripTbProperties = stripTbProperties;
 }
 
+void NodeSerializer::setVisGroupWorldProperties(std::vector<EntityProperty> properties)
+{
+  m_visGroupWorldProperties = std::move(properties);
+}
+
 void NodeSerializer::beginFile(
   const std::vector<const Node*>& rootNodes, kdl::task_manager& taskManager)
 {
@@ -136,6 +141,13 @@ void NodeSerializer::defaultLayer(const WorldNode& worldNode)
   else
   {
     worldEntity.removeProperty(EntityPropertyKeys::TbLayerOmitFromExport);
+  }
+
+  // VisGroup definitions + the raw-brush membership table (precomputed by NodeWriter).
+  // Empty unless the map has VisGroups, so a visgroup-free save stays byte-identical.
+  for (const auto& property : m_visGroupWorldProperties)
+  {
+    worldEntity.addOrUpdateProperty(property.key(), property.value());
   }
 
   if (m_exporting && defaultLayer.omitFromExport())
