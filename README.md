@@ -1,3 +1,28 @@
+# slopbroom
+
+**slopbroom** is an AI-built fork of [TrenchBroom](https://github.com/TrenchBroom/TrenchBroom),
+the level editor for Quake-engine games. Effectively every change in this fork was written by an
+AI coding assistant — hence the affectionate name — directed by the repository owner. It adds
+editor features used by an FTEQW-based CS/CoD-style mod:
+
+- Hammer-style **VisGroups** (multi-membership visibility groups)
+- Hammer **`.vmf` / `.jmf` import**
+- Visual **material-decal** and **model/sprite pickers** (browse `gfx/decals`, `models/`, `sprites/`)
+- A **default texture-scale** preference + Draw-Shape toolbar control
+- An **entity report** dialog
+- Model/sprite **rendering** work: IQM forward-axis fix, GoldSrc studiomodel crash guard,
+  image-sprite **alpha blending** + Half-Life/Source **`rendermode`** (additive/glow/color/alpha),
+  and infodecal scaling
+
+It tracks upstream TrenchBroom and stays licensed under the **GNU GPL v3** (see
+[LICENSE.txt](LICENSE.txt)); all upstream copyright notices are preserved, and upstream history is
+kept in git (and as the `upstream` remote).
+
+> This is a personal, AI-built fork ("slop" — but it works well). Not affiliated with or endorsed
+> by upstream TrenchBroom; please file issues here, not upstream.
+
+---
+
 # TrenchBroom
 
 [![TrenchBroom Icon](app/TrenchBroom/resources/graphics/images/AppIcon.png)](https://www.youtube.com/watch?v=shcAvnYp9ow)
