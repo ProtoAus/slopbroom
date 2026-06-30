@@ -23,6 +23,7 @@ namespace tb::gl
 {
 class Gl;
 class Material;
+class ShaderProgram;
 
 class MaterialRenderFunc
 {
@@ -40,6 +41,37 @@ private:
 
 public:
   DefaultMaterialRenderFunc(int minFilter, int magFilter);
+
+  void before(Gl& gl, const Material* material) override;
+  void after(Gl& gl, const Material* material) override;
+};
+
+/**
+ * Material render func for the entity-model shader. Per material it drives the shader's
+ * `EnableMasked` uniform and the GL blend / depth-write state so translucent materials (image
+ * sprites) blend smoothly instead of being hard alpha-tested. The per-entity `Blend` override
+ * lets a caller force a mode for HL/Source env_sprite rendermodes; FromMaterial honours the
+ * material's own blend func (translucent if it set one, masked/opaque otherwise).
+ */
+class ModelMaterialRenderFunc : public DefaultMaterialRenderFunc
+{
+public:
+  enum class Blend
+  {
+    FromMaterial,
+    Masked,
+    Alpha,
+    Additive,
+  };
+
+private:
+  ShaderProgram& m_shader;
+  Blend m_blend;
+  bool m_translucent = false;
+
+public:
+  ModelMaterialRenderFunc(
+    int minFilter, int magFilter, ShaderProgram& shader, Blend blend = Blend::FromMaterial);
 
   void before(Gl& gl, const Material* material) override;
   void after(Gl& gl, const Material* material) override;

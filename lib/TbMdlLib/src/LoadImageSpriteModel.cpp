@@ -20,8 +20,10 @@
 #include "mdl/LoadImageSpriteModel.h"
 
 #include "fs/ReaderException.h"
+#include "gl/GlUtils.h"
 #include "gl/IndexRangeMap.h"
 #include "gl/IndexRangeMapBuilder.h"
+#include "gl/Material.h"
 #include "mdl/LoadFreeImageTexture.h"
 #include "mdl/MaterialUtils.h"
 
@@ -37,8 +39,12 @@ auto loadMaterial(
          | kdl::or_else(makeReadTextureErrorHandler(fs, logger))
          | kdl::and_then([&](auto texture) {
              auto textureResource = createTextureResource(std::move(texture));
-             return Result<gl::Material>{
-               gl::Material{std::move(name), std::move(textureResource)}};
+             auto material = gl::Material{std::move(name), std::move(textureResource)};
+             // A loose image used as a sprite (env_sprite) is translucent: flag it so the
+             // entity-model renderer blends its alpha smoothly instead of hard alpha-testing
+             // it (which renders a soft PNG glow as a hard-edged disc).
+             material.setBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+             return Result<gl::Material>{std::move(material)};
            });
 }
 

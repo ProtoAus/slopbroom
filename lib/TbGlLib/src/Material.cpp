@@ -197,6 +197,11 @@ void Material::setCulling(const MaterialCulling culling)
   m_culling = culling;
 }
 
+const MaterialBlendFunc& Material::blendFunc() const
+{
+  return m_blendFunc;
+}
+
 void Material::setBlendFunc(const GLenum srcFactor, const GLenum destFactor)
 {
   m_blendFunc.enable = MaterialBlendFunc::Enable::UseFactors;

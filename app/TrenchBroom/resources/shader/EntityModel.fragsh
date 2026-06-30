@@ -25,6 +25,14 @@ uniform bool ApplyTinting;
 uniform vec4 TintColor;
 uniform bool GrayScale;
 
+// When true (masked / opaque models), hard alpha-test discard for crisp 1-bit edges. When
+// false (translucent materials, e.g. image-sprite glows), skip the discard so the alpha can
+// blend smoothly.
+uniform bool EnableMasked;
+// Overall alpha multiplier (env_sprite rendermode `renderamt`, 0..1; 1.0 = full). Only has a
+// visible effect when the material is being blended.
+uniform float RenderAmt;
+
 varying vec4 worldCoordinates;
 
 vec3 applySoftMapBoundsTint(vec3 inputFragColor, vec3 worldCoords);
@@ -33,15 +41,17 @@ void main()
 {
   vec4 texel = texture2D(Material, gl_TexCoord[0].st);
 
-  // Assume alpha masked or opaque.
-  // TODO: Make this optional if we gain support for translucent textures
-  if (texel.a < 0.5)
+  if (EnableMasked && texel.a < 0.5)
   {
     discard;
   }
 
+  float outAlpha = texel.a;
   gl_FragColor = vec4(vec3(Brightness / 2.0 * texel), texel.a);
   gl_FragColor = clamp(2 * gl_FragColor, 0.0, 1.0);
+  // The clamp(2 * ...) above is an RGB brightness scale; it must not re-harden the alpha
+  // curve, so restore the true texel alpha for the blend path.
+  gl_FragColor.a = outAlpha;
 
   if (GrayScale)
   {
@@ -53,9 +63,10 @@ void main()
   {
     gl_FragColor = vec4(gl_FragColor.rgb * TintColor.rgb * TintColor.a, gl_FragColor.a);
     float brightnessCorrection =
-      1.0 / max(max(abs(TintColor.r), abs(TintColor.g)), abs(TintColor.b));
+      1.0 / max(max(max(abs(TintColor.r), abs(TintColor.g)), abs(TintColor.b)), 0.0001);
     gl_FragColor = clamp(brightnessCorrection * gl_FragColor, 0.0, 1.0);
   }
 
   gl_FragColor.rgb = applySoftMapBoundsTint(gl_FragColor.rgb, worldCoordinates.xyz);
+  gl_FragColor.a *= RenderAmt;
 }

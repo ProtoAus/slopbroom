@@ -38,12 +38,36 @@
 #include "render/RenderContext.h"
 #include "render/Transformation.h"
 
+#include "kd/result.h"
+
 #include "vm/mat.h"
 
+#include <algorithm>
+#include <string>
 #include <vector>
 
 namespace tb::render
 {
+namespace
+{
+
+int intProperty(const mdl::Entity& entity, const std::string& key, const int defaultValue)
+{
+  if (const auto* value = entity.property(key); value && !value->empty())
+  {
+    try
+    {
+      return std::stoi(*value);
+    }
+    catch (const std::exception&)
+    {
+      return defaultValue;
+    }
+  }
+  return defaultValue;
+}
+
+} // namespace
 
 EntityModelRenderer::EntityModelRenderer(
   Logger& logger,
@@ -173,6 +197,10 @@ void EntityModelRenderer::render(RenderContext& renderContext)
     shader.set("TintColor", m_tintColor);
     shader.set("GrayScale", false);
     shader.set("Material", 0);
+    // Safe defaults; overridden per material/entity below. Important: RenderAmt must never be
+    // left at the GLSL default (0.0) or a blended material would vanish.
+    shader.set("EnableMasked", true);
+    shader.set("RenderAmt", 1.0f);
     shader.set("ShowSoftMapBounds", !renderContext.softMapBounds().is_empty());
     shader.set("SoftMapBoundsMin", renderContext.softMapBounds().min);
     shader.set("SoftMapBoundsMax", renderContext.softMapBounds().max);
@@ -212,8 +240,65 @@ void EntityModelRenderer::render(RenderContext& renderContext)
 
       shader.set("ModelMatrix", transformation);
 
-      auto renderFunc = gl::DefaultMaterialRenderFunc{
-        renderContext.minFilterMode(), renderContext.magFilterMode()};
+      // HL/Source render FX: `rendermode` picks the blend, `renderamt` scales alpha,
+      // `rendercolor` tints (mode 1 Color). No properties => Normal => the material's own
+      // blend (the Phase-1 default: opaque models mask, image sprites blend).
+      const auto& entity = entityNode->entity();
+      const auto renderMode = intProperty(entity, "rendermode", 0);
+      auto blend = gl::ModelMaterialRenderFunc::Blend::FromMaterial;
+      auto renderAmt = 1.0f;
+      auto applyTinting = m_applyTinting;
+      auto tintColor = m_tintColor;
+      if (renderMode != 0)
+      {
+        const auto amt =
+          float(std::clamp(intProperty(entity, "renderamt", 255), 0, 255)) / 255.0f;
+        switch (renderMode)
+        {
+        case 1: // Color: render flat-tinted by rendercolor
+          blend = gl::ModelMaterialRenderFunc::Blend::Alpha;
+          renderAmt = amt;
+          // Don't fight a selection/lock tint; skip the FGD-default black ("0 0 0").
+          if (!m_applyTinting)
+          {
+            if (const auto* rc = entity.property("rendercolor");
+                rc != nullptr && !rc->empty() && *rc != "0 0 0")
+            {
+              // Tint by the render color on success; leave it untinted (and alpha-blended) if
+              // the value is malformed.
+              static_cast<void>(Color::parse(*rc) | kdl::transform([&](const auto& c) {
+                applyTinting = true;
+                tintColor = c;
+              }));
+            }
+          }
+          break;
+        case 2: // Texture: alpha blend
+          blend = gl::ModelMaterialRenderFunc::Blend::Alpha;
+          renderAmt = amt;
+          break;
+        case 3: // Glow
+        case 5: // Additive
+          blend = gl::ModelMaterialRenderFunc::Blend::Additive;
+          renderAmt = amt;
+          break;
+        case 4: // Solid (alphatest)
+          blend = gl::ModelMaterialRenderFunc::Blend::Masked;
+          break;
+        default:
+          break;
+        }
+      }
+
+      shader.set("ApplyTinting", applyTinting);
+      shader.set("TintColor", tintColor);
+      shader.set("RenderAmt", renderAmt);
+
+      auto renderFunc = gl::ModelMaterialRenderFunc{
+        renderContext.minFilterMode(),
+        renderContext.magFilterMode(),
+        shader.program(),
+        blend};
       renderer->render(gl, shader.program(), renderFunc);
     }
   }

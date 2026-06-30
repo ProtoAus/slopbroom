@@ -380,6 +380,10 @@ void EntityBrowserView::renderModels(
   shader.set("ApplyTinting", false);
   shader.set("Brightness", pref(Preferences::Brightness));
   shader.set("GrayScale", false);
+  // Default masked/opaque; RenderAmt must never be left at the GLSL default (0.0) or a
+  // translucent sprite thumbnail would vanish. The render func flips EnableMasked per material.
+  shader.set("EnableMasked", true);
+  shader.set("RenderAmt", 1.0f);
 
   shader.set("CameraPosition", CameraPosition);
   shader.set("CameraDirection", CameraDirection);
@@ -408,8 +412,10 @@ void EntityBrowserView::renderModels(
               const auto multMatrix =
                 render::MultiplyModelMatrix{transformation, itemTrans};
 
-              auto renderFunc = gl::DefaultMaterialRenderFunc{
-                pref(Preferences::TextureMinFilter), pref(Preferences::TextureMagFilter)};
+              auto renderFunc = gl::ModelMaterialRenderFunc{
+                pref(Preferences::TextureMinFilter),
+                pref(Preferences::TextureMagFilter),
+                shader.program()};
               modelRenderer->render(gl, shader.program(), renderFunc);
             }
           }

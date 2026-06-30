@@ -21,6 +21,7 @@
 
 #include "Result.h"
 #include "fs/FileSystem.h"
+#include "fs/Reader.h"
 #include "gl/Resource.h"
 #include "mdl/EntityModel.h"
 #include "mdl/GameConfig.h"
@@ -37,10 +38,14 @@
 #include "mdl/LoadSpriteModel.h"
 #include "mdl/Palette.h"
 
+#include "kd/path_utils.h"
 #include "kd/result.h"
+#include "kd/vector_utils.h"
 
 #include <fmt/format.h>
 #include <fmt/std.h>
+
+#include <cstdint>
 
 namespace tb::mdl
 {
@@ -53,6 +58,38 @@ auto loadPalette(const fs::FileSystem& fs, const MaterialConfig& materialConfig)
   const auto& path = materialConfig.palette;
   return fs.openFile(path)
          | kdl::and_then([&](auto file) { return mdl::loadPalette(*file, path); });
+}
+
+// HL / GoldSrc *sequence-group* files (".mdl" with the "IDSQ" ident) hold only animation
+// sequences — they are NOT standalone models, and Assimp's HL1 importer crashes on them.
+// Refuse them here so the loader returns a graceful Error and the editor shows a
+// placeholder instead of crashing. The main studiomodels ("IDST" ident) DO load and render
+// fine via Assimp, so they are allowed through. (Quake MDL is "IDPO", handled natively
+// before this guard.) If a specific main model is found to crash Assimp, add its path to
+// the blacklist below.
+bool isUnsupportedStudioModel(const std::filesystem::path& path, fs::Reader reader)
+{
+  if (!kdl::path_has_extension(kdl::path_to_lower(path), ".mdl"))
+  {
+    return false;
+  }
+
+  // Per-path blacklist for individual models that segfault Assimp's HL1 importer.
+  static const auto blacklistedModels = std::vector<std::filesystem::path>{};
+  if (kdl::vec_contains(blacklistedModels, kdl::path_to_lower(path)))
+  {
+    return true;
+  }
+
+  if (reader.size() < sizeof(int32_t))
+  {
+    return false;
+  }
+
+  reader.seekFromBegin(0);
+  const auto ident = reader.readInt<int32_t>();
+  constexpr auto IDSQ = (('Q' << 24) + ('S' << 16) + ('D' << 8) + 'I');
+  return ident == IDSQ;
 }
 
 Result<EntityModelData> loadEntityModelData(
@@ -113,6 +150,11 @@ Result<EntityModelData> loadEntityModelData(
            if (canLoadImageSpriteModel(path))
            {
              return loadImageSpriteModel(modelName, reader, fs, logger);
+           }
+           if (isUnsupportedStudioModel(path, reader))
+           {
+             return Error{fmt::format(
+               "Unsupported HL studiomodel (sequence-group or blacklisted): {}", path)};
            }
            if (canLoadAssimpModel(path))
            {

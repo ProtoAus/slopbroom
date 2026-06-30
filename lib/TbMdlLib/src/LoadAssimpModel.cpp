@@ -257,6 +257,42 @@ gl::Texture loadTextureFromFileSystem(
          | kdl::or_else(makeReadTextureErrorHandler(fs, logger)) | kdl::value();
 }
 
+// Image formats a model skin can be stored as. Model skins are images regardless of the
+// game's wad-texture extensions (e.g. ".C" for Half-Life), so we search for these rather
+// than the game's materialConfig.extensions.
+const auto ModelTextureExtensions = std::vector<std::filesystem::path>{
+  ".png", ".tga", ".jpg", ".jpeg", ".bmp", ".dds"};
+
+// Resolves an Assimp/IQM external texture reference to an actual file on disk. The embedded
+// material name (e.g. "textures/nature/fern_1") is game-root-relative per the engine's
+// shader convention and usually carries NO extension, so resolve it from the game root
+// FIRST (with an extension search), then fall back to a path relative to the model's own
+// folder for models that ship their textures alongside the mesh (.obj/.dae/...).
+std::optional<std::filesystem::path> resolveAssimpTexturePath(
+  const std::filesystem::path& texturePath,
+  const std::filesystem::path& modelPath,
+  const fs::FileSystem& fs)
+{
+  const auto modelRelative = modelPath.parent_path() / texturePath;
+  // A multi-component reference (e.g. "textures/nature/fern_1") is a game-root material
+  // name (FTE/IQM shader convention) -> resolve from the game root first. A bare filename
+  // (e.g. "skin.png") is most likely shipped next to the mesh -> prefer model-relative so
+  // a coincidental same-stem image at the game root can't shadow it.
+  const auto bases = texturePath.has_parent_path()
+                       ? std::vector<std::filesystem::path>{texturePath, modelRelative}
+                       : std::vector<std::filesystem::path>{modelRelative, texturePath};
+  for (const auto& base : bases)
+  {
+    const auto resolved =
+      findMaterialFile(fs, base, ModelTextureExtensions) | kdl::value_or(base);
+    if (fs.pathInfo(resolved) == fs::PathInfo::File)
+    {
+      return resolved;
+    }
+  }
+  return std::nullopt;
+}
+
 gl::Texture loadUncompressedEmbeddedTexture(
   const aiTexel& data,
   const size_t width,
@@ -357,9 +393,12 @@ std::vector<gl::Texture> loadTexturesForMaterial(
         const auto texturePath =
           parseAssimpTexturePath(assimpPath, materialIndex, modelPath, logger))
       {
-        // The texture is not embedded. Load it using the file system.
-        return loadTextureFromFileSystem(
-          modelPath.parent_path() / *texturePath, fs, logger);
+        // The texture is not embedded. Resolve the (game-root-relative) reference and load
+        // it from the file system.
+        if (const auto resolved = resolveAssimpTexturePath(*texturePath, modelPath, fs))
+        {
+          return loadTextureFromFileSystem(*resolved, fs, logger);
+        }
       }
 
       return loadFallbackOrDefaultTexture(fs, logger);
@@ -743,7 +782,7 @@ bool useQuakeCoordinateSystem(const aiScene& scene)
   return isHl1;
 }
 
-aiMatrix4x4 getAxisTransform(const aiScene& scene)
+aiMatrix4x4 getAxisTransform(const aiScene& scene, const bool quakeCoordinateSystem)
 {
   // These MUST be in32_t, or the metadata 'Get' function will get confused.
   int32_t xAxis = 0, yAxis = 0, zAxis = 0, xAxisSign = 0, yAxisSign = 0, zAxisSign = 0;
@@ -762,7 +801,7 @@ aiMatrix4x4 getAxisTransform(const aiScene& scene)
         && scene.mMetaData->Get("UnitScaleFactor", unitScale)))
   {
     // By default, all 3D data from is provided in a right-handed coordinate system.
-    if (useQuakeCoordinateSystem(scene))
+    if (quakeCoordinateSystem)
     {
       // Quake models loaded by assimp use the following coordinate system:
       // +X out of the screen (mapped to +X)
@@ -823,13 +862,22 @@ Result<void> loadSceneFrame(
 
   // Assimp files import as y-up. We must multiply the root transform with an axis
   // transform matrix.
+  //
+  // IQM is id-Tech (+X forward, +Z up) — the same convention FTE uses and renders
+  // natively. Treat it like the other Quake-coordinate models (HL1 / Quake MDL) so the
+  // editor preview faces the same way as in-game, instead of being yawed 90 degrees by
+  // Assimp's default "+Z is forward" assumption.
+  const auto isIqm =
+    kdl::path_has_extension(kdl::path_to_lower(std::filesystem::path{name}), ".iqm");
+  const auto quakeCoordinateSystem = useQuakeCoordinateSystem(scene) || isIqm;
+
   auto meshes = std::vector<AssimpMeshWithTransforms>{};
   processRootNode(
     meshes,
     *scene.mRootNode,
     scene,
     scene.mRootNode->mTransformation,
-    getAxisTransform(scene));
+    getAxisTransform(scene, quakeCoordinateSystem));
 
   auto bounds = vm::bbox3f::builder{};
 
