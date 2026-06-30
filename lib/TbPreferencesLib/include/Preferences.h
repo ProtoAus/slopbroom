@@ -208,6 +208,11 @@ inline auto EnableMSAA = Preference<bool>{"render/Enable multisampling", true};
 inline auto AlignmentLock = Preference<bool>{"Editor/Texture lock", true};
 inline auto UVLock = Preference<bool>{"Editor/UV lock", false};
 
+// Default texture scale for newly created / reset brush faces.
+// 0 is a sentinel meaning "use the game's configured default" (no override), so the
+// out-of-box behavior is unchanged. Any positive value overrides both X and Y scale.
+inline auto DefaultTextureScale = Preference<float>{"Editor/Default texture scale", 0.0f};
+
 inline auto RendererFontPath = Preference<std::filesystem::path>{
   "render/Font name", "fonts/SourceSansPro-Regular.otf"};
 

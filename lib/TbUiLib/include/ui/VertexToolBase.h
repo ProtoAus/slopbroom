@@ -41,6 +41,7 @@
 #include "mdl/WorldNode.h"
 #include "render/RenderBatch.h"
 #include "render/RenderService.h"
+#include "ui/BrushBuilderUtils.h"
 #include "ui/Lasso.h"
 #include "ui/MapDocument.h"
 #include "ui/Tool.h"
@@ -309,9 +310,7 @@ public: // csg convex merge
     auto& map = m_document.map();
 
     const auto builder = mdl::BrushBuilder{
-      map.worldNode().mapFormat(),
-      map.worldBounds(),
-      map.gameInfo().gameConfig.faceAttribsConfig.defaults};
+      map.worldNode().mapFormat(), map.worldBounds(), defaultBrushFaceAttributes(map)};
     builder.createBrush(polyhedron, map.currentMaterialName())
       | kdl::transform([&](auto b) {
           for (const auto* selectedBrushNode : map.selection().brushes)

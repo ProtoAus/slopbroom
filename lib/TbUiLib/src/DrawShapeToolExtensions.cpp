@@ -35,6 +35,7 @@
 #include "mdl/Map.h"
 #include "mdl/WorldNode.h"
 #include "ui/BitmapButton.h"
+#include "ui/BrushBuilderUtils.h"
 #include "ui/MapDocument.h"
 #include "ui/ViewConstants.h"
 
@@ -125,7 +126,7 @@ Result<std::vector<mdl::Brush>> DrawShapeToolCuboidExtension::createBrushes(
   const auto builder = mdl::BrushBuilder{
     map.worldNode().mapFormat(),
     map.worldBounds(),
-    map.gameInfo().gameConfig.faceAttribsConfig.defaults};
+    defaultBrushFaceAttributes(map)};
 
   return builder.createCuboid(bounds, map.currentMaterialName())
     .transform([](auto brush) { return std::vector{std::move(brush)}; });
@@ -329,7 +330,7 @@ Result<std::vector<mdl::Brush>> DrawShapeToolCylinderExtension::createBrushes(
   const auto builder = mdl::BrushBuilder{
     map.worldNode().mapFormat(),
     map.worldBounds(),
-    map.gameInfo().gameConfig.faceAttribsConfig.defaults};
+    defaultBrushFaceAttributes(map)};
   return parameters.hollow()
            ? builder.createHollowCylinder(
                bounds,
@@ -385,7 +386,7 @@ Result<std::vector<mdl::Brush>> DrawShapeToolConeExtension::createBrushes(
   const auto builder = mdl::BrushBuilder{
     map.worldNode().mapFormat(),
     map.worldBounds(),
-    map.gameInfo().gameConfig.faceAttribsConfig.defaults};
+    defaultBrushFaceAttributes(map)};
   return builder
     .createCone(
       bounds, parameters.circleShape(), parameters.axis(), map.currentMaterialName())
@@ -446,7 +447,7 @@ Result<std::vector<mdl::Brush>> DrawShapeToolIcoSphereExtension::createBrushes(
   const auto builder = mdl::BrushBuilder{
     map.worldNode().mapFormat(),
     map.worldBounds(),
-    map.gameInfo().gameConfig.faceAttribsConfig.defaults};
+    defaultBrushFaceAttributes(map)};
 
   return builder.createIcoSphere(bounds, parameters.accuracy(), map.currentMaterialName())
     .transform([](auto brush) { return std::vector{std::move(brush)}; });
@@ -517,7 +518,7 @@ Result<std::vector<mdl::Brush>> DrawShapeToolUVSphereExtension::createBrushes(
   const auto builder = mdl::BrushBuilder{
     map.worldNode().mapFormat(),
     map.worldBounds(),
-    map.gameInfo().gameConfig.faceAttribsConfig.defaults};
+    defaultBrushFaceAttributes(map)};
   return builder
     .createUVSphere(
       bounds,
@@ -600,7 +601,7 @@ Result<std::vector<mdl::Brush>> DrawShapeToolStairsExtension::createBrushes(
   const auto builder = mdl::BrushBuilder{
     map.worldNode().mapFormat(),
     map.worldBounds(),
-    map.gameInfo().gameConfig.faceAttribsConfig.defaults};
+    defaultBrushFaceAttributes(map)};
 
   const auto materialName = map.currentMaterialName();
   const auto stepHeight = std::max(1.0, std::abs(parameters.stepHeight()));
@@ -688,7 +689,7 @@ Result<std::vector<mdl::Brush>> DrawShapeToolArchExtension::createBrushes(
   const auto builder = mdl::BrushBuilder{
     map.worldNode().mapFormat(),
     map.worldBounds(),
-    map.gameInfo().gameConfig.faceAttribsConfig.defaults};
+    defaultBrushFaceAttributes(map)};
 
   return builder.createArch(
     bounds,

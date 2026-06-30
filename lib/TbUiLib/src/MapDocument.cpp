@@ -45,6 +45,7 @@
 #include "mdl/WorldReader.h"
 #include "render/MapRenderer.h"
 #include "ui/ActionManager.h"
+#include "ui/BrushBuilderUtils.h"
 
 #include "kd/contracts.h"
 #include "kd/result.h"
@@ -133,7 +134,8 @@ Result<void> MapDocument::create(
            worldBounds,
            *m_taskManager,
            *m_resourceManager,
-           logger())
+           logger(),
+           defaultTextureScaleOverride())
          | kdl::transform([&](auto map) {
              setMap(std::move(map));
              documentWasLoadedNotifier();

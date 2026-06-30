@@ -26,6 +26,7 @@
 #include <QToolButton>
 
 #include "ui/BitmapButton.h"
+#include "ui/DefaultTextureScaleComboBox.h"
 #include "ui/DrawShapeToolExtension.h"
 #include "ui/ImageUtils.h"
 #include "ui/ViewConstants.h"
@@ -73,6 +74,10 @@ void DrawShapeToolPage::createGui()
     m_extensionPages->addWidget(extensionPage);
   }
 
+  // Persistent (not per-shape) control: the default texture scale for new brushes, kept in
+  // sync with Preferences -> View -> Brush Defaults.
+  m_defaultTextureScaleCombo = new DefaultTextureScaleComboBox{};
+
   auto* layout = new QHBoxLayout();
   layout->setContentsMargins(QMargins{});
   layout->setSpacing(LayoutConstants::MediumHMargin);
@@ -80,6 +85,9 @@ void DrawShapeToolPage::createGui()
   layout->addWidget(label, 0, Qt::AlignVCenter);
   layout->addWidget(m_extensionButton, 0, Qt::AlignVCenter);
   layout->addLayout(m_extensionPages);
+  layout->addWidget(
+    new QLabel{tr("Texture scale")}, 0, Qt::AlignVCenter);
+  layout->addWidget(m_defaultTextureScaleCombo, 0, Qt::AlignVCenter);
   layout->addStretch(2);
 
   setLayout(layout);

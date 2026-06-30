@@ -22,7 +22,10 @@
 #include <QBoxLayout>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDoubleValidator>
 #include <QLabel>
+#include <QLineEdit>
+#include <QLocale>
 #include <QSignalBlocker>
 #include <QtGlobal>
 
@@ -187,6 +190,22 @@ QWidget* ViewPreferencePane::createViewPreferences()
                                      "28", "32", "36", "40", "48", "56", "64", "72"});
   m_rendererFontSizeCombo->setValidator(new QIntValidator{1, 96});
 
+  m_defaultTextureScaleCombo = new QComboBox{};
+  m_defaultTextureScaleCombo->setEditable(true);
+  m_defaultTextureScaleCombo->setToolTip(
+    "Texture scale for newly created and reset brush faces. "
+    "'Game default' uses the scale configured by the current game.");
+  m_defaultTextureScaleCombo->addItems(
+    {"Game default", "0.0625", "0.125", "0.25", "0.5", "1", "2", "4"});
+  // The validator only constrains typed input to positive numbers; the non-numeric
+  // "Game default" item is chosen from the list, which bypasses validation. Force the C
+  // locale so typed validation uses '.' as the decimal separator, matching the dotted
+  // preset strings and the toDouble()/QString::number() parsing/formatting below
+  // (otherwise comma-decimal locales would accept "0,125" that toDouble() then drops).
+  auto* scaleValidator = new QDoubleValidator{0.0, 1.0e6, 6, m_defaultTextureScaleCombo};
+  scaleValidator->setLocale(QLocale::c());
+  m_defaultTextureScaleCombo->setValidator(scaleValidator);
+
   auto* layout = new FormWithSectionsLayout{};
   layout->setContentsMargins(
     LayoutConstants::DialogOuterMargin,
@@ -214,6 +233,9 @@ QWidget* ViewPreferencePane::createViewPreferences()
 
   layout->addSection("Fonts");
   layout->addRow("Renderer Font Size", m_rendererFontSizeCombo);
+
+  layout->addSection("Brush Defaults");
+  layout->addRow("Default texture scale", m_defaultTextureScaleCombo);
 
   viewBox->setLayout(layout);
 
@@ -274,6 +296,18 @@ void ViewPreferencePane::bindEvents()
     &QComboBox::currentTextChanged,
     this,
     &ViewPreferencePane::rendererFontSizeChanged);
+  // Commit the scale on dropdown selection or when a typed value is finished (Enter /
+  // focus-out) rather than on every keystroke.
+  connect(
+    m_defaultTextureScaleCombo,
+    QOverload<int>::of(&QComboBox::activated),
+    this,
+    &ViewPreferencePane::defaultTextureScaleChanged);
+  connect(
+    m_defaultTextureScaleCombo->lineEdit(),
+    &QLineEdit::editingFinished,
+    this,
+    &ViewPreferencePane::defaultTextureScaleChanged);
 }
 
 bool ViewPreferencePane::canResetToDefaults()
@@ -296,6 +330,7 @@ void ViewPreferencePane::doResetToDefaults()
   prefs.resetToDefault(Preferences::Theme);
   prefs.resetToDefault(Preferences::MaterialBrowserIconSize);
   prefs.resetToDefault(Preferences::RendererFontSize);
+  prefs.resetToDefault(Preferences::DefaultTextureScale);
 }
 
 void ViewPreferencePane::updateControls()
@@ -316,6 +351,7 @@ void ViewPreferencePane::updateControls()
     QSignalBlocker{m_materialBrowserIconSizeCombo};
 
   const auto rendererFontSizeBlocker = QSignalBlocker{m_rendererFontSizeCombo};
+  const auto defaultTextureScaleBlocker = QSignalBlocker{m_defaultTextureScaleCombo};
 
   auto& prefs = PreferenceManager::instance();
 
@@ -372,6 +408,11 @@ void ViewPreferencePane::updateControls()
 
   m_rendererFontSizeCombo->setCurrentText(
     QString::asprintf("%i", prefs.getPendingValue(Preferences::RendererFontSize)));
+
+  const auto defaultTextureScale =
+    prefs.getPendingValue(Preferences::DefaultTextureScale);
+  m_defaultTextureScaleCombo->setCurrentText(
+    defaultTextureScale > 0.0f ? QString::number(defaultTextureScale) : "Game default");
 }
 
 bool ViewPreferencePane::validate()
@@ -491,6 +532,32 @@ void ViewPreferencePane::rendererFontSizeChanged(const QString& str)
     auto& prefs = PreferenceManager::instance();
     prefs.set(Preferences::RendererFontSize, value);
   }
+}
+
+void ViewPreferencePane::defaultTextureScaleChanged()
+{
+  auto& prefs = PreferenceManager::instance();
+
+  const auto text = m_defaultTextureScaleCombo->currentText();
+  bool ok = false;
+  const auto value = text.toDouble(&ok);
+  if (ok && value > 0.0)
+  {
+    prefs.set(Preferences::DefaultTextureScale, float(value));
+  }
+  else if (text == "Game default" || (ok && value <= 0.0))
+  {
+    // "Game default", "0", or any non-positive number all mean "no override".
+    prefs.set(Preferences::DefaultTextureScale, 0.0f);
+  }
+  // else: empty or non-numeric typed text -> leave the stored value untouched.
+
+  // Re-sync the field to the stored value so it always shows what is in effect: snaps a
+  // typed "0" to "Game default" and normalizes formatting (e.g. ".5" -> "0.5").
+  const auto stored = prefs.getPendingValue(Preferences::DefaultTextureScale);
+  const auto blocker = QSignalBlocker{m_defaultTextureScaleCombo};
+  m_defaultTextureScaleCombo->setCurrentText(
+    stored > 0.0f ? QString::number(stored) : "Game default");
 }
 
 } // namespace tb::ui

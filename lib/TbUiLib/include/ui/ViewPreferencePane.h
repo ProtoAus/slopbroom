@@ -45,6 +45,7 @@ private:
   QComboBox* m_themeCombo = nullptr;
   QComboBox* m_materialBrowserIconSizeCombo = nullptr;
   QComboBox* m_rendererFontSizeCombo = nullptr;
+  QComboBox* m_defaultTextureScaleCombo = nullptr;
 
 public:
   explicit ViewPreferencePane(QWidget* parent = nullptr);
@@ -73,6 +74,7 @@ private slots:
   void themeChanged(int index);
   void materialBrowserIconSizeChanged(int index);
   void rendererFontSizeChanged(const QString& text);
+  void defaultTextureScaleChanged();
 };
 
 } // namespace tb::ui

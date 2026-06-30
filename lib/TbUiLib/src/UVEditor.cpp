@@ -31,6 +31,7 @@
 #include "mdl/Map_Brushes.h"
 #include "mdl/UpdateBrushFaceAttributes.h"
 #include "ui/BitmapButton.h"
+#include "ui/BrushBuilderUtils.h"
 #include "ui/MapDocument.h"
 #include "ui/QStyleUtils.h"
 #include "ui/UVView.h"
@@ -155,14 +156,14 @@ void UVEditor::resetUVClicked()
 {
   auto& map = m_document.map();
   setBrushFaceAttributes(
-    map, mdl::resetAll(map.gameInfo().gameConfig.faceAttribsConfig.defaults));
+    map, mdl::resetAll(defaultBrushFaceAttributes(map)));
 }
 
 void UVEditor::resetUVToWorldClicked()
 {
   auto& map = m_document.map();
   setBrushFaceAttributes(
-    map, mdl::resetAllToParaxial(map.gameInfo().gameConfig.faceAttribsConfig.defaults));
+    map, mdl::resetAllToParaxial(defaultBrushFaceAttributes(map)));
 }
 
 void UVEditor::flipUVHClicked()

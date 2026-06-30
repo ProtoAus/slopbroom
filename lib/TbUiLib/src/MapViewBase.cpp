@@ -77,6 +77,7 @@
 #include "ui/ActionManager.h"
 #include "ui/Animation.h"
 #include "ui/AppController.h"
+#include "ui/BrushBuilderUtils.h"
 #include "ui/EnableDisableTagCallback.h"
 #include "ui/FlashSelectionAnimation.h"
 #include "ui/MapDocument.h"
@@ -571,14 +572,14 @@ void MapViewBase::resetUV()
 {
   auto& map = m_document.map();
   setBrushFaceAttributes(
-    map, mdl::resetAll(map.gameInfo().gameConfig.faceAttribsConfig.defaults));
+    map, mdl::resetAll(defaultBrushFaceAttributes(map)));
 }
 
 void MapViewBase::resetUVToWorld()
 {
   auto& map = m_document.map();
   setBrushFaceAttributes(
-    map, mdl::resetAllToParaxial(map.gameInfo().gameConfig.faceAttribsConfig.defaults));
+    map, mdl::resetAllToParaxial(defaultBrushFaceAttributes(map)));
 }
 
 void MapViewBase::assembleBrush()

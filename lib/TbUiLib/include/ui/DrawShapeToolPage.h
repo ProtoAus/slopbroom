@@ -29,6 +29,7 @@ class QToolButton;
 
 namespace tb::ui
 {
+class DefaultTextureScaleComboBox;
 class DrawShapeToolExtensionManager;
 
 class DrawShapeToolPage : public QWidget
@@ -39,6 +40,7 @@ private:
 
   QToolButton* m_extensionButton = nullptr;
   QStackedLayout* m_extensionPages = nullptr;
+  DefaultTextureScaleComboBox* m_defaultTextureScaleCombo = nullptr;
 
   NotifierConnection m_notifierConnection;
 
