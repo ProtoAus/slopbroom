@@ -33,6 +33,7 @@
 #include "kd/contracts.h"
 #include "kd/overload.h"
 #include "kd/string_format.h"
+#include "kd/string_utils.h"
 #include "kd/task_manager.h"
 
 #include <fmt/format.h>
@@ -46,6 +47,24 @@
 
 namespace tb::mdl
 {
+
+namespace
+{
+
+bool isPathProperty(const std::string& key)
+{
+  // Worldspawn keys whose values are filesystem paths (or ;-separated path lists). Quake
+  // .map compilers parse a property value as an escaped string, so a Windows backslash
+  // separator reads as a bogus escape ("\w", "\P", ...) and warns/fails. Always emit these
+  // with forward slashes, regardless of how the value got into the entity (added in the
+  // editor, imported, or loaded from an existing backslash map and re-saved).
+  return key == EntityPropertyKeys::Wad
+         || key == EntityPropertyKeys::TbEnabledMaterialCollections
+         || key == EntityPropertyKeys::TbEntityDefinitions
+         || key == EntityPropertyKeys::TbMods;
+}
+
+} // namespace
 
 class QuakeFileSerializer : public MapFileSerializer
 {
@@ -376,11 +395,14 @@ void MapFileSerializer::doEndEntity(const Node& node)
 
 void MapFileSerializer::doEntityProperty(const EntityProperty& attribute)
 {
+  const auto value = isPathProperty(attribute.key())
+                       ? kdl::str_replace_every(attribute.value(), "\\", "/")
+                       : attribute.value();
   fmt::format_to(
     std::ostreambuf_iterator<char>{m_stream},
     "\"{}\" \"{}\"\n",
     escapeEntityProperties(attribute.key()),
-    escapeEntityProperties(attribute.value()));
+    escapeEntityProperties(value));
   ++m_line;
 }
 
