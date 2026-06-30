@@ -81,6 +81,7 @@
 #include "ui/ClipTool.h"
 #include "ui/ColorButton.h"
 #include "ui/CompilationDialog.h"
+#include "ui/EntityReportDialog.h"
 #include "ui/Console.h"
 #include "ui/CrashReporter.h"
 #include "ui/EdgeTool.h"
@@ -434,13 +435,16 @@ void MapWindow::createGui()
   // Add widgets to splitters
   m_vSplitter->addWidget(m_mapView);
   m_vSplitter->addWidget(m_infoPanel);
+  // Let the bottom Console/Issues panel (index 1) drag all the way closed, while the map
+  // view (index 0) stays protected from being collapsed away.
+  m_vSplitter->setCollapsible(1, true);
 
   m_hSplitter->addWidget(m_vSplitter);
   m_hSplitter->addWidget(m_inspector);
 
   // configure minimum sizes
   m_mapView->setMinimumSize(100, 100);
-  m_infoPanel->setMinimumSize(100, 100);
+  m_infoPanel->setMinimumWidth(100); // no height floor, so it can collapse fully
 
   m_vSplitter->setMinimumSize(100, 100);
   m_inspector->setMinimumSize(350, 100);
@@ -2212,6 +2216,15 @@ void MapWindow::showCompileDialog()
   }
 
   showModelessDialog(m_compilationDialog);
+}
+
+void MapWindow::showEntityReportDialog()
+{
+  if (!m_entityReportDialog)
+  {
+    m_entityReportDialog = new EntityReportDialog{*this, *m_document, this};
+  }
+  showModelessDialog(m_entityReportDialog);
 }
 
 void MapWindow::rerunLastCompilation()

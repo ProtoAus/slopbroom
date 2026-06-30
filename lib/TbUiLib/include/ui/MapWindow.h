@@ -73,6 +73,7 @@ class Action;
 class AppController;
 class CompilationDialog;
 class Console;
+class EntityReportDialog;
 class InfoPanel;
 class Inspector;
 enum class InspectorPage;
@@ -112,6 +113,7 @@ private:
   QLabel* m_statusBarLabel = nullptr;
 
   QPointer<CompilationDialog> m_compilationDialog;
+  QPointer<EntityReportDialog> m_entityReportDialog;
   QPointer<ObjExportDialog> m_objExportDialog;
 
   std::optional<std::string> m_lastCompilationProfileName;
@@ -399,6 +401,8 @@ public:
   bool hasLastCompilationProfile() const;
 
   void showLaunchEngineDialog();
+
+  void showEntityReportDialog();
 
   bool canRevealMaterial() const;
   void revealMaterial();
