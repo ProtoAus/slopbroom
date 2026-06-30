@@ -39,8 +39,10 @@
 
 namespace tb::ui
 {
-EntityPropertyEditor::EntityPropertyEditor(MapDocument& document, QWidget* parent)
+EntityPropertyEditor::EntityPropertyEditor(
+  AppController& appController, MapDocument& document, QWidget* parent)
   : QWidget{parent}
+  , m_appController{appController}
   , m_document{document}
 {
   createGui();
@@ -236,7 +238,7 @@ void EntityPropertyEditor::createGui()
   m_splitter->setObjectName("EntityAttributeEditor_Splitter");
 
   m_propertyGrid = new EntityPropertyGrid{m_document};
-  m_smartEditorManager = new SmartPropertyEditorManager{m_document};
+  m_smartEditorManager = new SmartPropertyEditorManager{m_appController, m_document};
   m_documentationText = new QTextEdit{};
   m_documentationText->setReadOnly(true);
 

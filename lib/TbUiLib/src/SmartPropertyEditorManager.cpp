@@ -30,8 +30,11 @@
 #include "ui/MapDocument.h"
 #include "ui/SmartChoiceEditor.h"
 #include "ui/SmartColorEditor.h"
+#include "ui/SmartDecalEditor.h"
 #include "ui/SmartDefaultPropertyEditor.h"
 #include "ui/SmartFlagsEditor.h"
+#include "ui/ModelPickerView.h"
+#include "ui/SmartModelEditor.h"
 #include "ui/SmartPropertyEditor.h"
 #include "ui/SmartWadEditor.h"
 
@@ -86,8 +89,9 @@ SmartPropertyEditorMatcher makeSmartPropertyEditorKeyMatcher(
 } // namespace
 
 SmartPropertyEditorManager::SmartPropertyEditorManager(
-  MapDocument& document, QWidget* parent)
+  AppController& appController, MapDocument& document, QWidget* parent)
   : QWidget{parent}
+  , m_appController{appController}
   , m_document{document}
   , m_stackedLayout{new QStackedLayout{this}}
 {
@@ -142,6 +146,38 @@ void SmartPropertyEditorManager::createEditors()
       makeSmartTypeEditorMatcher<mdl::PropertyValueTypes::Color<RgbB>>(),
       makeSmartTypeEditorMatcher<mdl::PropertyValueTypes::Color<Rgb>>()),
     new SmartColorEditor{m_document, this});
+  registerEditor(
+    [](const auto& propertyKey, const auto& nodes) {
+      // The decal-texture picker for an infodecal's `texture` key (companion to the
+      // FGD decal() directive). front() is enough — a selection of infodecals is
+      // homogeneous; this keeps the plain text field for every other entity's texture.
+      return propertyKey == "texture" && !nodes.empty()
+             && nodes.front()->entity().classname() == "infodecal";
+    },
+    new SmartDecalEditor{m_appController, m_document, this});
+  registerEditor(
+    [](const auto& propertyKey, const auto& nodes) {
+      // The model picker for any prop_* entity's `model` key (prop_static / prop_detail /
+      // prop_physics / ...; companion to the FGD model(studio) directive). front() is enough
+      // — the selection is homogeneous.
+      return propertyKey == "model" && !nodes.empty()
+             && nodes.front()->entity().classname().starts_with("prop_");
+    },
+    new SmartModelEditor{
+      m_appController, m_document, {"models"}, ModelPickerView::modelExtensions(), this});
+  registerEditor(
+    [](const auto& propertyKey, const auto& nodes) {
+      // env_sprite picks a sprite (sprites/) or a model (models/) for its `model` key —
+      // including loose images (PNG/...) rendered as billboard sprites.
+      return propertyKey == "model" && !nodes.empty()
+             && nodes.front()->entity().classname() == "env_sprite";
+    },
+    new SmartModelEditor{
+      m_appController,
+      m_document,
+      {"models", "sprites"},
+      ModelPickerView::spriteAndModelExtensions(),
+      this});
   registerEditor(
     [](const auto&, const auto&) { return true; },
     new SmartDefaultPropertyEditor{m_document, this});

@@ -45,7 +45,8 @@ public:
 
 private:
   void createGui(AppController& appController, MapDocument& document);
-  QWidget* createEntityPropertyEditor(MapDocument& document, QWidget* parent);
+  QWidget* createEntityPropertyEditor(
+    AppController& appController, MapDocument& document, QWidget* parent);
   QWidget* createEntityBrowser(
     AppController& appController, MapDocument& document, QWidget* parent);
 };

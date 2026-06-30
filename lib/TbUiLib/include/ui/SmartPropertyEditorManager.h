@@ -39,6 +39,7 @@ class EntityNodeBase;
 
 namespace ui
 {
+class AppController;
 class MapDocument;
 class SmartPropertyEditor;
 
@@ -48,6 +49,7 @@ using SmartPropertyEditorMatcher =
 class SmartPropertyEditorManager : public QWidget
 {
 private:
+  AppController& m_appController;
   MapDocument& m_document;
 
   std::vector<std::tuple<SmartPropertyEditorMatcher, SmartPropertyEditor*>> m_editors;
@@ -57,7 +59,8 @@ private:
   NotifierConnection m_notifierConnection;
 
 public:
-  explicit SmartPropertyEditorManager(MapDocument& document, QWidget* parent = nullptr);
+  explicit SmartPropertyEditorManager(
+    AppController& appController, MapDocument& document, QWidget* parent = nullptr);
 
   void switchEditor(
     const std::string& propertyKey, const std::vector<mdl::EntityNodeBase*>& nodes);

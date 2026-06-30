@@ -38,6 +38,7 @@ struct PropertyDefinition;
 
 namespace ui
 {
+class AppController;
 class EntityPropertyGrid;
 class MapDocument;
 class SmartPropertyEditorManager;
@@ -50,6 +51,7 @@ class EntityPropertyEditor : public QWidget
 {
   Q_OBJECT
 private:
+  AppController& m_appController;
   MapDocument& m_document;
   QSplitter* m_splitter = nullptr;
   EntityPropertyGrid* m_propertyGrid = nullptr;
@@ -60,7 +62,8 @@ private:
   NotifierConnection m_notifierConnection;
 
 public:
-  explicit EntityPropertyEditor(MapDocument& document, QWidget* parent = nullptr);
+  explicit EntityPropertyEditor(
+    AppController& appController, MapDocument& document, QWidget* parent = nullptr);
   ~EntityPropertyEditor() override;
 
 private:
