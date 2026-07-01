@@ -119,7 +119,9 @@ jobs:
 
       - name: Upload compiled manual
         uses: peaceiris/actions-gh-pages@v3
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        # Only upstream deploys upstream's manual (needs secrets.ACTIONS_DEPLOY_KEY + write access
+        # to TrenchBroom/manual); skip on the slopbroom fork so tag builds don't red-flag here.
+        if: ${{ startsWith(github.ref, 'refs/tags/') && github.repository == 'TrenchBroom/TrenchBroom' }}
         with:
           deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
           external_repository: TrenchBroom/manual
