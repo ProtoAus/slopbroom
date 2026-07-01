@@ -31,6 +31,7 @@ namespace mdl
 {
 class EditorContext;
 class GroupNode;
+class VisGroupManager;
 } // namespace mdl
 
 namespace render
@@ -44,6 +45,7 @@ private:
   class GroupNameAnchor;
 
   const mdl::EditorContext& m_editorContext;
+  const mdl::VisGroupManager* m_visGroupManager = nullptr;
   kdl::vector_set<const mdl::GroupNode*> m_groups;
 
   DirectEdgeRenderer m_boundsRenderer;
@@ -84,6 +86,10 @@ public:
    * call).
    */
   void invalidateGroup(const mdl::GroupNode& groupNode);
+
+  /** When set (on the default renderer), a group's border + label are tinted by its VisGroup
+   * colour (real VisGroup membership) or a distinct auto-colour from its persistent id. */
+  void setVisGroupManager(const mdl::VisGroupManager* visGroupManager);
 
   void setOverrideColors(bool overrideColors);
 

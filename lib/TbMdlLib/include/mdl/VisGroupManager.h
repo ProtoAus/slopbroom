@@ -56,6 +56,7 @@ private:
   IdType m_nextId = 1;
   std::unordered_map<const Node*, std::set<IdType>> m_membership;
   std::unordered_set<const Node*> m_hiddenNodes;
+  std::unordered_set<const Node*> m_hiddenPseudoGroups;
 
 public:
   VisGroupManager();
@@ -91,6 +92,15 @@ public:
 
   /** True if the node belongs to at least one group whose visible flag is off. */
   bool isHidden(const Node& node) const;
+
+  // Pseudo-VisGroups: every GroupNode is implicitly its own toggleable group (NOT a real
+  // VisGroup — no membership, no color). Toggling one off adds the group node to the hidden set,
+  // so EditorContext's ancestor walk hides its whole subtree. Visible by default; only the
+  // hidden group nodes are stored.
+  bool isPseudoGroupVisible(const Node* groupNode) const;
+  void setPseudoGroupVisible(const Node* groupNode, bool visible); // recomputes the hidden set
+  /** GroupNodes currently pseudo-hidden (for serialization on save). */
+  const std::unordered_set<const Node*>& hiddenPseudoGroups() const;
 
   /** Drop a node from all bookkeeping (call when the node leaves the tree). */
   void nodeWillBeRemoved(const Node* node);

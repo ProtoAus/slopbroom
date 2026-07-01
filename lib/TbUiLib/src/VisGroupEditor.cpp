@@ -35,11 +35,15 @@
 #include <QVBoxLayout>
 #include <QVariant>
 
+#include "mdl/GroupNode.h"
 #include "mdl/Map.h"
 #include "mdl/Map_VisGroups.h"
+#include "mdl/ModelUtils.h"
+#include "mdl/Node.h"
 #include "mdl/Selection.h"
 #include "mdl/VisGroup.h"
 #include "mdl/VisGroupManager.h"
+#include "mdl/WorldNode.h"
 #include "ui/MapDocument.h"
 #include "ui/QColorUtils.h"
 
@@ -49,6 +53,12 @@ namespace tb::ui
 {
 namespace
 {
+// Item-data roles distinguishing a derived "pseudo-VisGroup" (per GroupNode) row from a real
+// VisGroup row. Real rows store the VisGroup id in Qt::UserRole; pseudo rows store 0 there, a
+// true PseudoRole flag, and the GroupNode* (as a qulonglong) in NodePtrRole.
+constexpr auto PseudoRole = Qt::UserRole + 1;
+constexpr auto NodePtrRole = Qt::UserRole + 2;
+
 QIcon makeColorIcon(const std::optional<Color>& color)
 {
   // Always produce a swatch (a neutral one when no color is assigned) so every row has a
@@ -130,6 +140,11 @@ bool VisGroupEditor::eventFilter(QObject* watched, QEvent* event)
     {
       m_list->setCurrentItem(item);
 
+      if (item->data(PseudoRole).toBool())
+      {
+        return true; // pseudo rows: auto-colour swatch is display-only, no rename in v1
+      }
+
       // The swatch (decoration icon) is drawn just right of the visibility checkbox. Treat a
       // double-click in [checkbox-end, checkbox-end + icon-width] as "recolor", the rest as
       // "rename". (A fixed left-edge threshold landed on the checkbox, never the swatch.)
@@ -158,6 +173,9 @@ void VisGroupEditor::connectObservers()
   m_notifierConnection += map.visGroupsDidChangeNotifier.connect([this]() { reload(); });
   m_notifierConnection += m_document.nodesWereRemovedNotifier.connect(
     [this](const std::vector<mdl::Node*>&) { reload(); });
+  // Newly created groups must appear as pseudo-group rows.
+  m_notifierConnection += m_document.nodesWereAddedNotifier.connect(
+    [this](const std::vector<mdl::Node*>&) { reload(); });
   m_notifierConnection +=
     m_document.selectionDidChangeNotifier.connect([this](const auto&) { updateButtons(); });
 }
@@ -181,6 +199,38 @@ void VisGroupEditor::reload()
     m_list->addItem(item);
   }
 
+  // Pseudo-VisGroups: every GroupNode in the map, derived live (not stored). Each gets a distinct
+  // auto-colour swatch + a visibility checkbox; toggling hides/shows the group's whole subtree.
+  const auto groupNodes = mdl::collectGroups({&m_document.map().worldNode()});
+  if (!groupNodes.empty())
+  {
+    auto* header = new QListWidgetItem{tr("Groups")};
+    header->setFlags(Qt::NoItemFlags); // non-selectable, non-checkable separator
+    m_list->addItem(header);
+
+    for (auto* groupNode : groupNodes)
+    {
+      const auto autoColor =
+        groupNode->persistentId()
+          ? std::optional<Color>{mdl::autoGroupColor(*groupNode->persistentId())}
+          : std::nullopt;
+
+      auto* item = new QListWidgetItem{};
+      item->setText(QString::fromStdString(groupNode->name()));
+      item->setIcon(makeColorIcon(autoColor));
+      item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+      item->setCheckState(
+        manager.isPseudoGroupVisible(groupNode) ? Qt::Checked : Qt::Unchecked);
+      item->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(0));
+      item->setData(PseudoRole, true);
+      item->setData(
+        NodePtrRole,
+        QVariant::fromValue<qulonglong>(
+          reinterpret_cast<qulonglong>(static_cast<mdl::Node*>(groupNode))));
+      m_list->addItem(item);
+    }
+  }
+
   m_updating = false;
   updateButtons();
 }
@@ -188,7 +238,11 @@ void VisGroupEditor::reload()
 std::size_t VisGroupEditor::currentGroupId() const
 {
   auto* item = m_list->currentItem();
-  return item ? static_cast<std::size_t>(item->data(Qt::UserRole).toULongLong()) : 0;
+  if (item == nullptr || item->data(PseudoRole).toBool())
+  {
+    return 0; // pseudo (derived-group) rows carry no real VisGroup id
+  }
+  return static_cast<std::size_t>(item->data(Qt::UserRole).toULongLong());
 }
 
 void VisGroupEditor::updateButtons()
@@ -209,8 +263,18 @@ void VisGroupEditor::onItemChanged(QListWidgetItem* item)
   {
     return;
   }
-  const auto id = static_cast<std::size_t>(item->data(Qt::UserRole).toULongLong());
   const auto visible = item->checkState() == Qt::Checked;
+  if (item->data(PseudoRole).toBool())
+  {
+    if (auto* node =
+          reinterpret_cast<mdl::Node*>(item->data(NodePtrRole).toULongLong());
+        node != nullptr)
+    {
+      mdl::setPseudoGroupVisible(m_document.map(), node, visible);
+    }
+    return;
+  }
+  const auto id = static_cast<std::size_t>(item->data(Qt::UserRole).toULongLong());
   mdl::setVisGroupVisible(m_document.map(), id, visible);
 }
 

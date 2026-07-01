@@ -72,9 +72,12 @@ inline const std::string TbSoftMapBounds = TbPrefix + "soft_map_bounds";
 //   _tb_visgroup_groups      worldspawn = GroupNode membership "gid=g g;..." (gid = group persistentId;
 //                            a GroupNode drops arbitrary props on read, so it can't be inline)
 //   _tb_visgroup_def_<id>    worldspawn = one per group, value "<visible> <rrggbb> <name>"
+//   _tb_visgroup_groups_hidden  worldspawn = ";"-joined persistentIds of GroupNodes whose
+//                            implicit pseudo-VisGroup is toggled off (its subtree is hidden)
 inline const std::string TbVisGroups = TbPrefix + "visgroups";
 inline const std::string TbVisGroupBrushes = TbPrefix + "visgroup_brushes";
 inline const std::string TbVisGroupGroups = TbPrefix + "visgroup_groups";
+inline const std::string TbVisGroupGroupsHidden = TbPrefix + "visgroup_groups_hidden";
 inline const std::string TbVisGroupDefPrefix = TbPrefix + "visgroup_def_";
 } // namespace EntityPropertyKeys
 

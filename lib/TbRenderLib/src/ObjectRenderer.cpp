@@ -211,6 +211,7 @@ void ObjectRenderer::setVisGroupManager(const mdl::VisGroupManager* visGroupMana
 {
   m_entityRenderer.setVisGroupManager(visGroupManager);
   m_brushRenderer.setVisGroupManager(visGroupManager);
+  m_groupRenderer.setVisGroupManager(visGroupManager);
 }
 
 void ObjectRenderer::renderOpaque(RenderContext& renderContext, RenderBatch& renderBatch)

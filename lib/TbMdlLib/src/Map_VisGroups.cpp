@@ -106,6 +106,15 @@ void setVisGroupVisible(Map& map, const IdType id, const bool visible)
   map.editorContextDidChangeNotifier();
 }
 
+void setPseudoGroupVisible(Map& map, Node* groupNode, const bool visible)
+{
+  map.visGroupManager().setPseudoGroupVisible(groupNode, visible);
+  map.incModificationCount();
+  // View state, like setVisGroupVisible: only the renderer needs to know; don't reload the
+  // panel here (it would re-enter the item-changed signal that triggered us).
+  map.editorContextDidChangeNotifier();
+}
+
 void setVisGroupColor(Map& map, const IdType id, std::optional<Color> color)
 {
   map.visGroupManager().setGroupColor(id, std::move(color));

@@ -632,6 +632,7 @@ void Map::loadVisGroups()
   // --- 1. Parse worldspawn: group defs + the brush/group membership tables ---
   auto brushTable = std::string{};
   auto groupTable = std::string{};
+  auto pseudoHiddenTable = std::string{};
   for (const auto& property : world.entity().properties())
   {
     const auto& key = property.key();
@@ -673,6 +674,10 @@ void Map::loadVisGroups()
     else if (key == EntityPropertyKeys::TbVisGroupGroups)
     {
       groupTable = property.value();
+    }
+    else if (key == EntityPropertyKeys::TbVisGroupGroupsHidden)
+    {
+      pseudoHiddenTable = property.value();
     }
   }
 
@@ -777,6 +782,21 @@ void Map::loadVisGroups()
     }
   }
 
+  // --- 4b. Resolve pseudo-VisGroup hidden groups: ";"-joined GroupNode persistentIds ---
+  for (const auto& idStr : kdl::str_split(pseudoHiddenTable, ";"))
+  {
+    const auto gid = kdl::str_to_size(idStr);
+    if (!gid)
+    {
+      continue;
+    }
+    const auto it = containers.find(static_cast<IdType>(*gid));
+    if (it != containers.end() && dynamic_cast<const GroupNode*>(it->second) != nullptr)
+    {
+      manager.setPseudoGroupVisible(it->second, false);
+    }
+  }
+
   // --- 5. Inline _tb_visgroups on entities: read into the manager, then strip ---
   world.accept(kdl::overload(
     [&](auto&& thisLambda, WorldNode& w) { w.visitChildren(thisLambda); },
@@ -807,7 +827,8 @@ void Map::loadVisGroups()
   {
     if (property.hasPrefix(EntityPropertyKeys::TbVisGroupDefPrefix)
         || property.key() == EntityPropertyKeys::TbVisGroupBrushes
-        || property.key() == EntityPropertyKeys::TbVisGroupGroups)
+        || property.key() == EntityPropertyKeys::TbVisGroupGroups
+        || property.key() == EntityPropertyKeys::TbVisGroupGroupsHidden)
     {
       keysToRemove.push_back(property.key());
     }

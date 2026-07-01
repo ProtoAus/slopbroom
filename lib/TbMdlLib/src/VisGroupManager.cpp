@@ -208,10 +208,34 @@ bool VisGroupManager::isHidden(const Node& node) const
   return m_hiddenNodes.find(&node) != m_hiddenNodes.end();
 }
 
+bool VisGroupManager::isPseudoGroupVisible(const Node* groupNode) const
+{
+  return m_hiddenPseudoGroups.find(groupNode) == m_hiddenPseudoGroups.end();
+}
+
+void VisGroupManager::setPseudoGroupVisible(const Node* groupNode, const bool visible)
+{
+  if (visible)
+  {
+    m_hiddenPseudoGroups.erase(groupNode);
+  }
+  else
+  {
+    m_hiddenPseudoGroups.insert(groupNode);
+  }
+  rebuildHiddenSet();
+}
+
+const std::unordered_set<const Node*>& VisGroupManager::hiddenPseudoGroups() const
+{
+  return m_hiddenPseudoGroups;
+}
+
 void VisGroupManager::nodeWillBeRemoved(const Node* node)
 {
   m_membership.erase(node);
   m_hiddenNodes.erase(node);
+  m_hiddenPseudoGroups.erase(node);
 }
 
 void VisGroupManager::clear()
@@ -219,12 +243,20 @@ void VisGroupManager::clear()
   m_groups.clear();
   m_membership.clear();
   m_hiddenNodes.clear();
+  m_hiddenPseudoGroups.clear();
   m_nextId = 1;
 }
 
 void VisGroupManager::rebuildHiddenSet()
 {
   m_hiddenNodes.clear();
+
+  // Pseudo-hidden group nodes hide unconditionally (independent of real-visgroup membership);
+  // EditorContext's ancestor walk then hides each hidden group's whole subtree.
+  for (const auto* node : m_hiddenPseudoGroups)
+  {
+    m_hiddenNodes.insert(node);
+  }
 
   auto hiddenGroups = std::set<IdType>{};
   for (const auto& g : m_groups)

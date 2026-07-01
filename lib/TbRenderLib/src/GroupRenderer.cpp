@@ -25,6 +25,8 @@
 #include "gl/VertexType.h"
 #include "mdl/EditorContext.h"
 #include "mdl/GroupNode.h"
+#include "mdl/VisGroup.h"
+#include "mdl/VisGroupManager.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
 #include "render/RenderService.h"
@@ -118,6 +120,15 @@ void GroupRenderer::setOverlayBackgroundColor(const Color& overlayBackgroundColo
 void GroupRenderer::setShowOccludedOverlays(const bool showOccludedOverlays)
 {
   m_showOccludedOverlays = showOccludedOverlays;
+}
+
+void GroupRenderer::setVisGroupManager(const mdl::VisGroupManager* visGroupManager)
+{
+  if (visGroupManager != m_visGroupManager)
+  {
+    m_visGroupManager = visGroupManager;
+    invalidate(); // the non-override border branch bakes colour into vertices
+  }
 }
 
 void GroupRenderer::setBoundsColor(const Color& boundsColor)
@@ -260,8 +271,22 @@ gl::AttrString GroupRenderer::groupString(const mdl::GroupNode& groupNode) const
   return gl::AttrString{groupNode.name()};
 }
 
-Color GroupRenderer::groupColor(const mdl::GroupNode&) const
+Color GroupRenderer::groupColor(const mdl::GroupNode& groupNode) const
 {
+  // Selected groups are drawn by a separate (manager-less) renderer, so the selection colour is
+  // handled there. Precedence here: the group's real-VisGroup colour if it is a member, else a
+  // distinct auto-colour from its persistent id, else the default group colour.
+  if (m_visGroupManager)
+  {
+    if (const auto color = m_visGroupManager->nodeColor(&groupNode))
+    {
+      return *color;
+    }
+  }
+  if (const auto& persistentId = groupNode.persistentId())
+  {
+    return mdl::autoGroupColor(*persistentId);
+  }
   return pref(Preferences::DefaultGroupColor);
 }
 

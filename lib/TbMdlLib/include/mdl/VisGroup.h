@@ -50,4 +50,8 @@ std::string colorToHex(const Color& color);
 /** Parse a 6-digit "rrggbb" hex string into a color; std::nullopt if malformed. */
 std::optional<Color> colorFromHex(std::string_view hex);
 
+/** A deterministic, distinct colour for a group's "pseudo-VisGroup", derived from the group's
+ * persistent id — so groups get visually different colours with no stored colour. */
+Color autoGroupColor(IdType persistentId);
+
 } // namespace tb::mdl

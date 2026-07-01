@@ -163,6 +163,24 @@ std::vector<EntityProperty> precomputeWorldVisGroupProperties(
       EntityPropertyKeys::TbVisGroupGroups, kdl::str_join(groupEntries, ";"));
   }
 
+  // Pseudo-VisGroup (per-group) hidden state: the persistentIds of GroupNodes toggled off.
+  auto pseudoHiddenIds = std::vector<std::string>{};
+  for (const auto* node : visGroups.hiddenPseudoGroups())
+  {
+    if (const auto* groupNode = dynamic_cast<const GroupNode*>(node))
+    {
+      if (const auto pid = groupNode->persistentId())
+      {
+        pseudoHiddenIds.push_back(kdl::str_to_string(*pid));
+      }
+    }
+  }
+  if (!pseudoHiddenIds.empty())
+  {
+    properties.emplace_back(
+      EntityPropertyKeys::TbVisGroupGroupsHidden, kdl::str_join(pseudoHiddenIds, ";"));
+  }
+
   return properties;
 }
 
@@ -249,7 +267,10 @@ void NodeWriter::setVisGroupManager(const VisGroupManager* visGroups)
 void NodeWriter::writeMap(kdl::task_manager& taskManager)
 {
   m_serializer->beginFile({&m_world}, taskManager);
-  if (m_visGroupManager != nullptr && !m_visGroupManager->groups().empty())
+  if (
+    m_visGroupManager != nullptr
+    && (!m_visGroupManager->groups().empty()
+        || !m_visGroupManager->hiddenPseudoGroups().empty()))
   {
     m_serializer->setVisGroupWorldProperties(
       precomputeWorldVisGroupProperties(m_world, *m_visGroupManager));

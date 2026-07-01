@@ -28,6 +28,7 @@
 namespace tb::mdl
 {
 class Map;
+class Node;
 
 // Free-function facade over VisGroupManager (mirrors Map_Layers). The UI calls these.
 // Membership changes are undoable (SetVisGroupMembershipCommand); group create/rename/
@@ -39,6 +40,10 @@ void deleteVisGroup(Map& map, IdType id);
 void renameVisGroup(Map& map, IdType id, std::string name);
 void setVisGroupVisible(Map& map, IdType id, bool visible);
 void setVisGroupColor(Map& map, IdType id, std::optional<Color> color);
+
+// Pseudo-VisGroup (per-GroupNode) visibility toggle — view state, non-undoable, like
+// setVisGroupVisible.
+void setPseudoGroupVisible(Map& map, Node* groupNode, bool visible);
 
 void addSelectedToVisGroup(Map& map, IdType id);
 void removeSelectedFromVisGroup(Map& map, IdType id);
