@@ -72,7 +72,22 @@ void EditorContext::setVisGroupManager(const VisGroupManager* visGroups)
 
 bool EditorContext::hiddenByVisGroup(const Node& node) const
 {
-  return m_visGroups != nullptr && m_visGroups->isHidden(node);
+  if (m_visGroups == nullptr)
+  {
+    return false;
+  }
+  // Hidden if the node OR any ancestor container (a group / layer that is a VisGroup member) is
+  // in a hidden VisGroup. Walking ancestors is what makes adding a group to a VisGroup hide the
+  // group's whole subtree (nested groups included), live, without expanding membership onto every
+  // child.
+  for (const Node* n = &node; n != nullptr; n = n->parent())
+  {
+    if (m_visGroups->isHidden(*n))
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool EditorContext::entityDefinitionHidden(const EntityNodeBase& entityNode) const
