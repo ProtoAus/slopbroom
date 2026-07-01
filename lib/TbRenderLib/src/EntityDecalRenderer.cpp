@@ -80,8 +80,8 @@ std::vector<Vertex> createDecalBrushFace(
   auto attrs = mdl::BrushFaceAttributes{materialName, face.attributes()};
   auto uvCoordSystem = face.uvCoordSystem().clone();
 
-  // Per-entity size multiplier from the `scale` key (e.g. infodecal's "1.0"/"0.5"), so the
-  // editor preview matches the in-game decal size. Default 1.0 when absent/unparseable.
+  // Per-entity size multiplier from the `scale` key (e.g. infodecal's "1.0"/"0.5"). Default
+  // 1.0 when absent/unparseable.
   auto decalScale = 1.0;
   if (const auto* scaleStr = entityNode.entity().property("scale");
       scaleStr != nullptr && !scaleStr->empty())
@@ -94,16 +94,32 @@ std::vector<Vertex> createDecalBrushFace(
     }
   }
 
+  // Match the in-game infodecal size (cl_infodecal.qc): a fixed 64u base on the LONG axis at
+  // scale 1 (SPRAY_QUAD_HALF=32 -> 64u full), the texture pixels only setting the aspect ratio.
+  // We OVERRIDE the wall-face UV scale that `attrs` inherited with a uniform texel->world factor,
+  // so the decal's size is independent of the wall's texture scale and the decal's pixel
+  // resolution. Driving both the quad extent AND the UVs from this one scale also means a single
+  // copy of the texture fills the quad at any `scale` (no tiling). cl_infodecal_scale is assumed
+  // at its 1.0 default (a runtime cvar the editor can't read).
+  constexpr auto decalBaseSize = 64.0; // world units along the long axis at scale 1
+  const auto longAxisPx = double(std::max(textureSize.x(), textureSize.y()));
+  if (longAxisPx > 0.0)
+  {
+    const auto uvScale = float(decalBaseSize * decalScale / longAxisPx);
+    attrs.setScale(vm::vec2f{uvScale, uvScale});
+  }
+
   // create the geometry for the decal
   const auto plane = face.boundary();
   const auto origin = entityNode.physicalBounds().center();
   const auto center = plane.project_point(origin);
 
-  // re-project the vertices in case the UV axes are not on the face plane
+  // re-project the vertices in case the UV axes are not on the face plane. The decalScale lives
+  // in attrs' UV scale now, so the quad and the UVs stay in lock-step (no tiling).
   const auto xShift =
-    uvCoordSystem->uAxis() * double(attrs.xScale() * textureSize.x() / 2.0f) * decalScale;
+    uvCoordSystem->uAxis() * double(attrs.xScale() * textureSize.x() / 2.0f);
   const auto yShift =
-    uvCoordSystem->vAxis() * double(attrs.yScale() * textureSize.y() / 2.0f) * decalScale;
+    uvCoordSystem->vAxis() * double(attrs.yScale() * textureSize.y() / 2.0f);
 
   // we want to shift every vertex by just a little bit to avoid z-fighting
   const auto offset = plane.normal * 0.1;
