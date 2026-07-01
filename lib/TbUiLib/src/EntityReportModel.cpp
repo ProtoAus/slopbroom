@@ -167,32 +167,37 @@ EntityReportModel* EntityReportFilterProxyModel::sourceReportModel() const
 
 void EntityReportFilterProxyModel::setTypeFilter(const EntityTypeFilter typeFilter)
 {
+  beginFilterChange();
   m_typeFilter = typeFilter;
-  invalidateFilter();
+  endFilterChange();
 }
 
 void EntityReportFilterProxyModel::setClassFilter(const QString& classname)
 {
+  beginFilterChange();
   m_classFilter = classname;
-  invalidateFilter();
+  endFilterChange();
 }
 
 void EntityReportFilterProxyModel::setKeyValueFilter(const QString& text)
 {
+  beginFilterChange();
   m_keyValueFilter = text;
-  invalidateFilter();
+  endFilterChange();
 }
 
 void EntityReportFilterProxyModel::setExactMatch(const bool exact)
 {
+  beginFilterChange();
   m_exact = exact;
-  invalidateFilter();
+  endFilterChange();
 }
 
 void EntityReportFilterProxyModel::setIncludeHidden(const bool includeHidden)
 {
+  beginFilterChange();
   m_includeHidden = includeHidden;
-  invalidateFilter();
+  endFilterChange();
 }
 
 bool EntityReportFilterProxyModel::filterAcceptsRow(
