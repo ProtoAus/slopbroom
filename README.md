@@ -17,6 +17,9 @@ features for an FTEQW-based CS/CoD-style mod.
 - **Material-decal picker** — browse loose `gfx/decals` PNGs and place infodecals, rendered in the
   viewport at their true in-engine size.
 - Hammer-style **VisGroups** — multi-membership visibility groups.
+- Hammer-style **Paste Special** (`Ctrl+Shift+V`) — paste N copies with an accumulative offset &
+  rotation, optionally grouped, with pasted entity names made unique (linked `target` / `targetname`
+  rewired within each copy) and an optional name prefix.
 - **View filters** — show/hide brushes, point entities, and tags (clip, detail, trigger, …) live.
 - Hammer **`.vmf` / `.jmf` import**.
 - **Entity Report** — a sortable, filterable table of every entity in the map.

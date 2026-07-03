@@ -21,6 +21,7 @@
 #include "mdl/BrushNode.h"
 #include "mdl/CatchConfig.h"
 #include "mdl/EntityNode.h"
+#include "mdl/EntityProperties.h"
 #include "mdl/GameInfo.h"
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
@@ -37,7 +38,13 @@
 #include "mdl/TestUtils.h"
 #include "mdl/WorldNode.h"
 
+#include "vm/vec.h"
+
 #include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
+#include <cmath>
+#include <vector>
 
 namespace tb::mdl
 {
@@ -694,6 +701,142 @@ common/caulk
           CHECK(pastedBrushNode2->linkId() == originalBrushLinkId);
         }
       }
+    }
+  }
+
+  SECTION("pasteSpecial")
+  {
+    auto& map = fixture.create();
+
+    // A wired pair: trigger -> door via target/targetname.
+    auto* triggerNode = new EntityNode{Entity{{
+      {"classname", "trigger_multiple"},
+      {"target", "door"},
+      {"origin", "0 0 0"},
+    }}};
+    auto* doorNode = new EntityNode{Entity{{
+      {"classname", "func_door"},
+      {"targetname", "door"},
+      {"origin", "0 0 0"},
+    }}};
+    addNodes(map, {{parentForNodes(map), {triggerNode, doorNode}}});
+    selectNodes(map, {triggerNode, doorNode});
+    const auto str = serializeSelectedNodes(map);
+
+    const auto& defaultLayerNode = *map.worldNode().defaultLayer();
+    const auto entitiesInLayer = [&]() {
+      auto result = std::vector<EntityNode*>{};
+      for (auto* child : defaultLayerNode.children())
+      {
+        if (auto* entityNode = dynamic_cast<EntityNode*>(child))
+        {
+          result.push_back(entityNode);
+        }
+      }
+      return result;
+    };
+
+    SECTION("uniquifies targetnames and rewires intra-copy references")
+    {
+      auto options = PasteSpecialOptions{};
+      options.numCopies = 1;
+      options.makeNamesUnique = true;
+
+      REQUIRE(pasteSpecial(map, str, options) == PasteType::Node);
+      REQUIRE(defaultLayerNode.childCount() == 4u);
+
+      // The originals are untouched.
+      REQUIRE(doorNode->entity().property(EntityPropertyKeys::Targetname) != nullptr);
+      CHECK(*doorNode->entity().property(EntityPropertyKeys::Targetname) == "door");
+      REQUIRE(triggerNode->entity().property(EntityPropertyKeys::Target) != nullptr);
+      CHECK(*triggerNode->entity().property(EntityPropertyKeys::Target) == "door");
+
+      auto* copyDoor = static_cast<EntityNode*>(nullptr);
+      auto* copyTrigger = static_cast<EntityNode*>(nullptr);
+      for (auto* entityNode : entitiesInLayer())
+      {
+        if (entityNode == doorNode || entityNode == triggerNode)
+        {
+          continue;
+        }
+        if (entityNode->entity().classname() == "func_door")
+        {
+          copyDoor = entityNode;
+        }
+        else if (entityNode->entity().classname() == "trigger_multiple")
+        {
+          copyTrigger = entityNode;
+        }
+      }
+      REQUIRE(copyDoor != nullptr);
+      REQUIRE(copyTrigger != nullptr);
+
+      // The copy's name was bumped, and the copy's trigger was rewired to the new name.
+      const auto* copyName = copyDoor->entity().property(EntityPropertyKeys::Targetname);
+      REQUIRE(copyName != nullptr);
+      CHECK(*copyName == "door1");
+
+      const auto* copyTarget = copyTrigger->entity().property(EntityPropertyKeys::Target);
+      REQUIRE(copyTarget != nullptr);
+      CHECK(*copyTarget == "door1");
+    }
+
+    SECTION("creates N copies with an accumulative offset")
+    {
+      auto options = PasteSpecialOptions{};
+      options.numCopies = 2;
+      options.offset = vm::vec3d{128, 0, 0};
+      options.makeNamesUnique = false;
+
+      REQUIRE(pasteSpecial(map, str, options) == PasteType::Node);
+      // 2 originals + 2 copies * 2 entities.
+      REQUIRE(defaultLayerNode.childCount() == 6u);
+
+      auto xs = std::vector<long>{};
+      for (auto* entityNode : entitiesInLayer())
+      {
+        xs.push_back(std::lround(entityNode->entity().origin().x()));
+      }
+      std::ranges::sort(xs);
+      CHECK(xs == std::vector<long>{0, 0, 128, 128, 256, 256});
+    }
+
+    SECTION("groups all copies into a single group")
+    {
+      auto options = PasteSpecialOptions{};
+      options.numCopies = 2;
+      options.offset = vm::vec3d{128, 0, 0};
+      options.groupCopies = true;
+      options.makeNamesUnique = false;
+
+      REQUIRE(pasteSpecial(map, str, options) == PasteType::Node);
+      // 2 original entities + 1 group.
+      REQUIRE(defaultLayerNode.childCount() == 3u);
+
+      auto* groupNode = static_cast<GroupNode*>(nullptr);
+      for (auto* child : defaultLayerNode.children())
+      {
+        if (auto* g = dynamic_cast<GroupNode*>(child))
+        {
+          groupNode = g;
+        }
+      }
+      REQUIRE(groupNode != nullptr);
+      CHECK(groupNode->childCount() == 4u);
+    }
+
+    SECTION("is a single undo step")
+    {
+      auto options = PasteSpecialOptions{};
+      options.numCopies = 3;
+      options.offset = vm::vec3d{128, 0, 0};
+
+      REQUIRE(pasteSpecial(map, str, options) == PasteType::Node);
+      REQUIRE(defaultLayerNode.childCount() == 8u); // 2 originals + 3 copies * 2
+
+      REQUIRE(map.canUndoCommand());
+      map.undoCommand();
+      CHECK(defaultLayerNode.childCount() == 2u);
     }
   }
 }

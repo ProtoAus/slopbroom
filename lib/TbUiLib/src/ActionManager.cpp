@@ -1057,6 +1057,16 @@ void ActionManager::createEditMenu()
     }),
     MenuEntryType::PasteAtOriginalPosition);
   editMenu.addItem(addAction(Action{
+    std::filesystem::path{"Menu/Edit/Paste Special..."},
+    QObject::tr("Paste Special..."),
+    ActionContext::Any,
+    QKeySequence{Qt::CTRL | Qt::SHIFT | Qt::Key_V},
+    [](auto& context) { context.mapWindow().pasteSpecial(); },
+    [](const auto& context) {
+      return context.hasDocument() && context.mapWindow().canPaste();
+    },
+  }));
+  editMenu.addItem(addAction(Action{
     "Menu/Edit/Duplicate",
     QObject::tr("Duplicate"),
     ActionContext::Any,
@@ -1166,7 +1176,7 @@ void ActionManager::createEditMenu()
     "Menu/Edit/Snap Vertices to Integer",
     QObject::tr("Snap Vertices to Integer"),
     ActionContext::Any,
-    QKeySequence{Qt::CTRL | Qt::SHIFT | Qt::Key_V},
+    QKeySequence{Qt::CTRL | Qt::SHIFT | Qt::Key_Y},
     [](auto& context) { context.mapWindow().snapVerticesToInteger(); },
     [](const auto& context) {
       return context.hasDocument() && context.mapWindow().canSnapVertices();

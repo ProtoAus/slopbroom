@@ -153,6 +153,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MultiPaneMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ObjExportDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/OnePaneMapView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PasteSpecialDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PickRequest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupButton.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupWindow.cpp
@@ -392,6 +393,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MultiPaneMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ObjExportDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/OnePaneMapView.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PasteSpecialDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PickRequest.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupButton.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupWindow.h

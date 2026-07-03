@@ -96,6 +96,7 @@
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ObjExportDialog.h"
+#include "ui/PasteSpecialDialog.h"
 #include "ui/QPathUtils.h"
 #include "ui/QStringUtils.h"
 #include "ui/QStyleUtils.h"
@@ -1418,6 +1419,34 @@ void MapWindow::pasteAtOriginalPosition()
   if (canPaste())
   {
     paste();
+  }
+}
+
+void MapWindow::pasteSpecial()
+{
+  if (!canPaste())
+  {
+    return;
+  }
+
+  auto* clipboard = QApplication::clipboard();
+  const auto qtext = clipboard->text();
+  if (qtext.isEmpty())
+  {
+    logger().error() << "Clipboard is empty";
+    return;
+  }
+
+  auto& map = m_document->map();
+
+  // The source selection is still current here; pass its bounds so the dialog's offset
+  // "grab" buttons can prefill from the selection size, and so pasteSpecial can pivot
+  // rotation on the original's centre.
+  auto dialog = PasteSpecialDialog{this, map.selectionBounds()};
+  if (dialog.exec() == QDialog::Accepted)
+  {
+    mdl::pasteSpecial(
+      map, mapStringFromUnicode(map.encoding(), qtext), dialog.options());
   }
 }
 

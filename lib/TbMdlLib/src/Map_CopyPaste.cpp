@@ -22,16 +22,22 @@
 #include "Logger.h"
 #include "SimpleParserStatus.h"
 #include "Uuid.h"
+#include "mdl/ApplyAndSwap.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushFaceHandle.h"
 #include "mdl/BrushFaceReader.h"
 #include "mdl/BrushNode.h"
+#include "mdl/Entity.h"
+#include "mdl/EntityDefinitionUtils.h"
 #include "mdl/EntityNode.h"
+#include "mdl/EntityProperties.h"
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
 #include "mdl/LinkedGroupUtils.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Brushes.h"
+#include "mdl/Map_Geometry.h"
+#include "mdl/Map_Groups.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/ModelUtils.h"
@@ -44,11 +50,19 @@
 #include "mdl/WorldNode.h"
 
 #include "kd/contracts.h"
+#include "kd/overload.h"
 #include "kd/ranges/to.h"
 #include "kd/vector_utils.h"
 
+#include "vm/mat.h"
+#include "vm/scalar.h"
+#include "vm/vec.h"
+
 #include <algorithm>
+#include <cctype>
 #include <ranges>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace tb::mdl
 {
@@ -248,6 +262,177 @@ bool pasteBrushFaces(Map& map, const std::vector<BrushFace>& faces)
   return setBrushFaceAttributes(map, update);
 }
 
+// Collect every entity node in the given (possibly nested) node set, descending into groups.
+std::vector<EntityNode*> collectCopyEntities(const std::vector<Node*>& nodes)
+{
+  auto result = std::vector<EntityNode*>{};
+  for (auto* node : nodes)
+  {
+    node->accept(kdl::overload(
+      [](WorldNode&) {},
+      [](LayerNode&) {},
+      [&](auto&& thisLambda, GroupNode& groupNode) {
+        groupNode.visitChildren(thisLambda);
+      },
+      [&](EntityNode& entityNode) { result.push_back(&entityNode); },
+      [](BrushNode&) {},
+      [](PatchNode&) {}));
+  }
+  return result;
+}
+
+// All non-empty targetname values currently present anywhere in the map.
+std::unordered_set<std::string> collectTargetnames(const WorldNode& world)
+{
+  auto names = std::unordered_set<std::string>{};
+  world.accept(kdl::overload(
+    [&](auto&& thisLambda, const WorldNode& worldNode) {
+      worldNode.visitChildren(thisLambda);
+    },
+    [&](auto&& thisLambda, const LayerNode& layerNode) {
+      layerNode.visitChildren(thisLambda);
+    },
+    [&](auto&& thisLambda, const GroupNode& groupNode) {
+      groupNode.visitChildren(thisLambda);
+    },
+    [&](const EntityNode& entityNode) {
+      if (const auto* tn = entityNode.entity().property(EntityPropertyKeys::Targetname))
+      {
+        if (!tn->empty())
+        {
+          names.insert(*tn);
+        }
+      }
+    },
+    [](const BrushNode&) {},
+    [](const PatchNode&) {}));
+  return names;
+}
+
+// Return base if free, else base with its trailing integer incremented until unused
+// ("door"->"door1", "door01"->"door02", preserving zero-padding width).
+std::string makeUniqueName(
+  const std::string& base, const std::unordered_set<std::string>& used)
+{
+  if (!used.contains(base))
+  {
+    return base;
+  }
+
+  auto i = base.size();
+  while (i > 0 && std::isdigit(static_cast<unsigned char>(base[i - 1])))
+  {
+    --i;
+  }
+  const auto stem = base.substr(0, i);
+  const auto digits = base.substr(i);
+  const auto width = digits.size();
+
+  auto next = std::size_t{1};
+  if (!digits.empty() && digits.size() <= 9)
+  {
+    next = static_cast<std::size_t>(std::stoul(digits)) + 1;
+  }
+
+  for (;; ++next)
+  {
+    auto num = std::to_string(next);
+    if (num.size() < width)
+    {
+      num = std::string(width - num.size(), '0') + num;
+    }
+    auto candidate = stem + num;
+    if (!used.contains(candidate))
+    {
+      return candidate;
+    }
+  }
+}
+
+// Give each pasted entity's targetname a fresh (optionally prefixed, optionally uniqued)
+// value and rewrite intra-copy link-source references (target/killtarget/...) to match.
+void uniquifyPastedEntityNames(
+  Map& map,
+  const std::vector<Node*>& copyNodes,
+  const bool makeUnique,
+  const std::string& prefix)
+{
+  const auto entities = collectCopyEntities(copyNodes);
+  if (entities.empty())
+  {
+    return;
+  }
+
+  // Names taken elsewhere in the map; exclude this copy's own current names so a name that
+  // does not collide externally can be kept as-is.
+  auto used = collectTargetnames(map.worldNode());
+  for (auto* entityNode : entities)
+  {
+    if (const auto* tn = entityNode->entity().property(EntityPropertyKeys::Targetname))
+    {
+      used.erase(*tn);
+    }
+  }
+
+  auto renameMap = std::unordered_map<std::string, std::string>{};
+  for (auto* entityNode : entities)
+  {
+    const auto* tn = entityNode->entity().property(EntityPropertyKeys::Targetname);
+    if (!tn || tn->empty() || renameMap.contains(*tn))
+    {
+      continue;
+    }
+    auto base = prefix.empty() ? *tn : prefix + *tn;
+    auto newName = makeUnique ? makeUniqueName(base, used) : base;
+    used.insert(newName);
+    renameMap.emplace(*tn, std::move(newName));
+  }
+  if (renameMap.empty())
+  {
+    return;
+  }
+
+  const auto isReference = [](const Entity& entity, const std::string& key) {
+    return key == EntityPropertyKeys::Target || key == EntityPropertyKeys::Killtarget
+           || isLinkSourceProperty(entity.definition(), key);
+  };
+
+  applyAndSwap(
+    map,
+    "Uniquify Entity Names",
+    entities,
+    collectContainingGroups(kdl::vec_static_cast<Node*>(entities)),
+    kdl::overload(
+      [](Layer&) { return true; },
+      [](Group&) { return true; },
+      [&](Entity& entity) {
+        if (const auto* tn = entity.property(EntityPropertyKeys::Targetname))
+        {
+          if (const auto it = renameMap.find(*tn); it != renameMap.end())
+          {
+            entity.addOrUpdateProperty(EntityPropertyKeys::Targetname, it->second);
+          }
+        }
+        for (const auto& key : entity.propertyKeys())
+        {
+          if (!isReference(entity, key))
+          {
+            continue;
+          }
+          if (const auto* value = entity.property(key))
+          {
+            if (const auto it = renameMap.find(*value); it != renameMap.end())
+            {
+              entity.addOrUpdateProperty(key, it->second);
+            }
+          }
+        }
+        return true;
+      },
+      [](Brush&) { return true; },
+      [](BezierPatch&) { return true; }));
+}
+
 } // namespace
 
 std::string serializeSelectedNodes(Map& map)
@@ -305,6 +490,78 @@ PasteType paste(Map& map, const std::string& str)
                       });
            })
          | kdl::value();
+}
+
+PasteType pasteSpecial(
+  Map& map, const std::string& str, const PasteSpecialOptions& options)
+{
+  // Captured before the first paste (which deselects the source): the rotation pivot.
+  const auto sourceBounds = map.selectionBounds();
+  const auto numCopies = std::max(1, options.numCopies);
+  const auto applyTransform =
+    options.offset != vm::vec3d{0, 0, 0} || options.rotation != vm::vec3d{0, 0, 0};
+
+  auto transaction = Transaction{map, "Paste Special"};
+
+  auto allCopyNodes = std::vector<Node*>{};
+  for (int k = 1; k <= numCopies; ++k)
+  {
+    if (paste(map, str) != PasteType::Node)
+    {
+      if (k == 1)
+      {
+        transaction.cancel();
+        return PasteType::Failed;
+      }
+      break; // clipboard is node data but a later copy failed to add; stop here
+    }
+
+    // Copy the freshly-pasted (and now selected) top-level nodes before the next paste
+    // deselects them.
+    const auto copyNodes = map.selection().nodes;
+
+    if (applyTransform)
+    {
+      const auto kf = double(k);
+      const auto pivot = sourceBounds ? (options.startAtCenter ? sourceBounds->center()
+                                                               : sourceBounds->min)
+                                      : vm::vec3d{0, 0, 0};
+      const auto rotation =
+        vm::rotation_matrix(vm::vec3d{0, 0, 1}, vm::to_radians(options.rotation.z() * kf))
+        * vm::rotation_matrix(
+          vm::vec3d{0, 1, 0}, vm::to_radians(options.rotation.y() * kf))
+        * vm::rotation_matrix(
+          vm::vec3d{1, 0, 0}, vm::to_radians(options.rotation.x() * kf));
+      const auto transform = vm::translation_matrix(options.offset * kf)
+                             * vm::translation_matrix(pivot) * rotation
+                             * vm::translation_matrix(-pivot);
+      transformSelection(map, "Paste Special", transform);
+    }
+
+    if (options.makeNamesUnique || !options.namePrefix.empty())
+    {
+      uniquifyPastedEntityNames(
+        map, copyNodes, options.makeNamesUnique, options.namePrefix);
+    }
+
+    allCopyNodes.insert(allCopyNodes.end(), copyNodes.begin(), copyNodes.end());
+  }
+
+  if (allCopyNodes.empty())
+  {
+    transaction.cancel();
+    return PasteType::Failed;
+  }
+
+  deselectAll(map);
+  selectNodes(map, allCopyNodes);
+  if (options.groupCopies)
+  {
+    groupSelectedNodes(map, "Paste Special");
+  }
+
+  transaction.commit();
+  return PasteType::Node;
 }
 
 } // namespace tb::mdl

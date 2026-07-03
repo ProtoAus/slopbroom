@@ -254,6 +254,7 @@ public:
 
   void pasteAtCursorPosition();
   void pasteAtOriginalPosition();
+  void pasteSpecial();
   mdl::PasteType paste();
   bool canPaste() const;
 
