@@ -281,8 +281,12 @@ std::vector<EntityNode*> collectCopyEntities(const std::vector<Node*>& nodes)
   return result;
 }
 
-// All non-empty targetname values currently present anywhere in the map.
-std::unordered_set<std::string> collectTargetnames(const WorldNode& world)
+// All non-empty targetname values present anywhere in the map, skipping the given nodes.
+// Exclusion is by node identity (not by value) on purpose: a value-based exclusion would
+// drop an *original* entity that happens to share the excluded copy's name — which is the
+// norm when pasting a copy — and then no name collision would be detected.
+std::unordered_set<std::string> collectTargetnames(
+  const WorldNode& world, const std::unordered_set<const Node*>& exclude)
 {
   auto names = std::unordered_set<std::string>{};
   world.accept(kdl::overload(
@@ -296,6 +300,10 @@ std::unordered_set<std::string> collectTargetnames(const WorldNode& world)
       groupNode.visitChildren(thisLambda);
     },
     [&](const EntityNode& entityNode) {
+      if (exclude.contains(&entityNode))
+      {
+        return;
+      }
       if (const auto* tn = entityNode.entity().property(EntityPropertyKeys::Targetname))
       {
         if (!tn->empty())
@@ -363,16 +371,14 @@ void uniquifyPastedEntityNames(
     return;
   }
 
-  // Names taken elsewhere in the map; exclude this copy's own current names so a name that
-  // does not collide externally can be kept as-is.
-  auto used = collectTargetnames(map.worldNode());
+  // Names taken elsewhere in the map, with this copy's own entities excluded (by identity)
+  // so a name that does not collide externally can be kept as-is.
+  auto exclude = std::unordered_set<const Node*>{};
   for (auto* entityNode : entities)
   {
-    if (const auto* tn = entityNode->entity().property(EntityPropertyKeys::Targetname))
-    {
-      used.erase(*tn);
-    }
+    exclude.insert(entityNode);
   }
+  auto used = collectTargetnames(map.worldNode(), exclude);
 
   auto renameMap = std::unordered_map<std::string, std::string>{};
   for (auto* entityNode : entities)
