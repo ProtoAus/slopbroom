@@ -87,6 +87,10 @@ public:
   bool canToggleScaleTool() const;
   void toggleScaleTool();
 
+  bool sweepToolActive() const;
+  bool canToggleSweepTool() const;
+  void toggleSweepTool();
+
   bool shearToolActive() const;
   bool canToggleShearTool() const;
   void toggleShearTool();

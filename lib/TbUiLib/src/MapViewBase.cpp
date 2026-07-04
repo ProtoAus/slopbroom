@@ -600,6 +600,11 @@ void MapViewBase::performClip()
   m_toolBox.performClip();
 }
 
+void MapViewBase::performSweep()
+{
+  m_toolBox.performSweep();
+}
+
 void MapViewBase::resetCameraZoom()
 {
   camera().setZoom(1.0f);
@@ -907,6 +912,7 @@ ActionContext::Type MapViewBase::actionContext() const
     : m_toolBox.clipToolActive()        ? ActionContext::ClipTool
     : m_toolBox.anyVertexToolActive()   ? ActionContext::AnyVertexTool
     : m_toolBox.rotateToolActive()      ? ActionContext::RotateTool
+    : m_toolBox.sweepToolActive()       ? ActionContext::SweepTool
     : m_toolBox.scaleToolActive()       ? ActionContext::ScaleTool
     : m_toolBox.shearToolActive()       ? ActionContext::ShearTool
                                         : ActionContext::NoTool;

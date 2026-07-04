@@ -179,6 +179,16 @@ void ActionManager::createViewActions()
       return context.hasDocument() && context.mapWindow().clipToolActive();
     },
   });
+  addAction(Action{
+    std::filesystem::path{"Controls/Map view/Perform sweep"},
+    QObject::tr("Perform Sweep"),
+    ActionContext::AnyView | ActionContext::AnyOrNoSelection | ActionContext::SweepTool,
+    QKeySequence{Qt::Key_Return},
+    [](auto& context) { context.mapView().performSweep(); },
+    [](const auto& context) {
+      return context.hasDocument() && context.mapWindow().sweepToolActive();
+    },
+  });
 
   /* ========== Translation ========== */
   // applies to objects, vertices, handles (e.g. rotation center)
@@ -1444,6 +1454,20 @@ void ActionManager::createToolsMenu()
     std::filesystem::path{"RotateTool.svg"},
   }));
   toolsMenu.addItem(addAction(Action{
+    "Menu/Edit/Tools/Sweep Tool",
+    QObject::tr("Sweep Tool"),
+    ActionContext::Any,
+    QKeySequence{},
+    [](auto& context) { context.mapWindow().toggleSweepTool(); },
+    [](const auto& context) {
+      return context.hasDocument() && context.mapWindow().canToggleSweepTool();
+    },
+    [](const auto& context) {
+      return context.hasDocument() && context.mapWindow().sweepToolActive();
+    },
+    std::filesystem::path{"SweepTool.svg"},
+  }));
+  toolsMenu.addItem(addAction(Action{
     "Menu/Edit/Tools/Scale Tool",
     QObject::tr("Scale Tool"),
     ActionContext::Any,
@@ -2022,6 +2046,7 @@ void ActionManager::createToolbar()
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Edge Tool"));
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Face Tool"));
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Rotate Tool"));
+  m_toolBar.addItem(existingAction("Menu/Edit/Tools/Sweep Tool"));
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Scale Tool"));
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Shear Tool"));
   m_toolBar.addSeparator();

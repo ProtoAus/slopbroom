@@ -37,8 +37,10 @@ constexpr Type RotateTool = 1u << 5u;
 constexpr Type ScaleTool = 1u << 6u;
 constexpr Type ShearTool = 1u << 7u;
 constexpr Type AnyVertexTool = 1u << 8u;
-constexpr Type AnyTool =
-  AnyVertexTool | AssembleBrushTool | ClipTool | RotateTool | ScaleTool | ShearTool;
+// bit 12 (the next free bit after the selection block below, 9..11)
+constexpr Type SweepTool = 1u << 12u;
+constexpr Type AnyTool = AnyVertexTool | AssembleBrushTool | ClipTool | RotateTool
+                         | ScaleTool | ShearTool | SweepTool;
 constexpr Type AnyOrNoTool = AnyTool | NoTool;
 constexpr Type NoSelection = 1u << 9u;
 constexpr Type NodeSelection = 1u << 10u;

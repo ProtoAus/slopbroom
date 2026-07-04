@@ -209,6 +209,24 @@ void SwitchableMapViewContainer::toggleScaleTool()
   m_toolBox->toggleScaleTool();
 }
 
+bool SwitchableMapViewContainer::sweepToolActive() const
+{
+  return m_toolBox->sweepToolActive();
+}
+
+bool SwitchableMapViewContainer::canToggleSweepTool() const
+{
+  const auto& map = m_document.map();
+  return sweepToolActive() || map.selection().hasBrushFaces();
+}
+
+void SwitchableMapViewContainer::toggleSweepTool()
+{
+  contract_pre(canToggleSweepTool());
+
+  m_toolBox->toggleSweepTool();
+}
+
 bool SwitchableMapViewContainer::canToggleShearTool() const
 {
   const auto& map = m_document.map();

@@ -191,6 +191,7 @@ private: // notification handlers
   void toolActivated(Tool& tool);
   void toolDeactivated(Tool& tool);
   void toolHandleSelectionChanged(Tool& tool);
+  void toolRefreshViews(Tool& tool);
   void selectionDidChange(const mdl::SelectionChange& selectionChange);
   void currentLayerDidChange();
   void groupWasOpened();
@@ -310,6 +311,10 @@ public:
   void toggleScaleTool();
   bool canToggleScaleTool() const;
   bool scaleToolActive() const;
+
+  void toggleSweepTool();
+  bool canToggleSweepTool() const;
+  bool sweepToolActive() const;
 
   void toggleShearTool();
   bool canToggleShearTool() const;

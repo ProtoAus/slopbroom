@@ -45,6 +45,7 @@ class MapDocument;
 class MoveObjectsTool;
 class ExtrudeTool;
 class RotateTool;
+class SweepTool;
 class ScaleTool;
 class ShearTool;
 class VertexTool;
@@ -63,6 +64,7 @@ private:
   std::unique_ptr<MoveObjectsTool> m_moveObjectsTool;
   std::unique_ptr<ExtrudeTool> m_extrudeTool;
   std::unique_ptr<RotateTool> m_rotateTool;
+  std::unique_ptr<SweepTool> m_sweepTool;
   std::unique_ptr<ScaleTool> m_scaleTool;
   std::unique_ptr<ShearTool> m_shearTool;
   std::unique_ptr<VertexTool> m_vertexTool;
@@ -83,6 +85,7 @@ public: // tools
   MoveObjectsTool& moveObjectsTool();
   ExtrudeTool& extrudeTool();
   RotateTool& rotateTool();
+  SweepTool& sweepTool();
   ScaleTool& scaleTool();
   ShearTool& shearTool();
   VertexTool& vertexTool();
@@ -104,6 +107,10 @@ public: // tools
   double rotateToolAngle() const;
   vm::vec3d rotateToolCenter() const;
   void moveRotationCenter(const vm::vec3d& delta);
+
+  void toggleSweepTool();
+  bool sweepToolActive() const;
+  void performSweep();
 
   void toggleScaleTool();
   bool scaleToolActive() const;

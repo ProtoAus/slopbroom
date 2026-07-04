@@ -106,6 +106,7 @@
 #include "ui/ReplaceMaterialDialog.h"
 #include "ui/SignalDelayer.h"
 #include "ui/Splitter.h"
+#include "ui/SweepTool.h"
 #include "ui/SwitchableMapViewContainer.h"
 #include "ui/VertexTool.h"
 #include "ui/ViewUtils.h"
@@ -746,6 +747,15 @@ QString describeSelection(const mdl::Map& map)
 
 void MapWindow::updateStatusBar()
 {
+  // explain an empty Sweep preview instead of showing nothing
+  const auto& sweepTool = m_mapView->mapViewToolBox().sweepTool();
+  if (sweepTool.active() && sweepTool.previewIsDegenerate())
+  {
+    m_statusBarLabel->setText(
+      tr("Sweep: nothing to build - move the destination away from the source face"));
+    return;
+  }
+
   m_statusBarLabel->setText(QString{describeSelection(m_document->map())});
 }
 
@@ -810,6 +820,8 @@ void MapWindow::connectObservers()
   m_notifierConnection +=
     m_mapView->mapViewToolBox().toolHandleSelectionChangedNotifier.connect(
       this, &MapWindow::toolHandleSelectionChanged);
+  m_notifierConnection += m_mapView->mapViewToolBox().refreshViewsNotifier.connect(
+    this, &MapWindow::toolRefreshViews);
 }
 
 void MapWindow::documentWasLoaded()
@@ -882,11 +894,22 @@ void MapWindow::gridDidChange()
 void MapWindow::toolActivated(Tool&)
 {
   updateActionStateDelayed();
+  updateStatusBarDelayed();
 }
 
 void MapWindow::toolDeactivated(Tool&)
 {
   updateActionStateDelayed();
+  updateStatusBarDelayed();
+}
+
+void MapWindow::toolRefreshViews(Tool& tool)
+{
+  // the Sweep status bar hint tracks the preview, which announces updates via refreshViews
+  if (&tool == &m_mapView->mapViewToolBox().sweepTool())
+  {
+    updateStatusBarDelayed();
+  }
 }
 
 void MapWindow::toolHandleSelectionChanged(Tool&)
@@ -1834,6 +1857,24 @@ bool MapWindow::canToggleScaleTool() const
 bool MapWindow::scaleToolActive() const
 {
   return m_mapView->scaleToolActive();
+}
+
+void MapWindow::toggleSweepTool()
+{
+  if (canToggleSweepTool())
+  {
+    m_mapView->toggleSweepTool();
+  }
+}
+
+bool MapWindow::canToggleSweepTool() const
+{
+  return m_mapView->canToggleSweepTool();
+}
+
+bool MapWindow::sweepToolActive() const
+{
+  return m_mapView->sweepToolActive();
 }
 
 void MapWindow::toggleShearTool()
