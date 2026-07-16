@@ -200,6 +200,21 @@ GLint ShaderProgram::findAttributeLocation(Gl& gl, const std::string& name) cons
   return it->second;
 }
 
+GLint ShaderProgram::tryFindAttributeLocation(Gl& gl, const std::string& name) const
+{
+  auto it = m_attributeCache.find(name);
+  if (it == std::end(m_attributeCache))
+  {
+    const auto index = gl.getAttribLocation(m_programId, name.c_str());
+
+    auto inserted = false;
+    std::tie(it, inserted) = m_attributeCache.emplace(name, index);
+    contract_assert(inserted);
+  }
+
+  return it->second;
+}
+
 void ShaderProgram::destroy(Gl& gl)
 {
   if (m_programId != 0)

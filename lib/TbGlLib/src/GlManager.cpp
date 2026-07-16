@@ -69,6 +69,7 @@ void initializeShaders(Gl& gl, ShaderManager& shaderManager)
     LinkArrowShader,
     TriangleShader,
     UVViewShader,
+    LitBspShader,
   };
 
   shaders | std::views::transform([&](const auto& shaderConfig) {

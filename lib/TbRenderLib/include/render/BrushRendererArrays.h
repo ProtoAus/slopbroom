@@ -24,6 +24,7 @@
 #include "gl/Vbo.h"
 #include "gl/VboManager.h"
 #include "gl/VertexType.h"
+#include "mdl/BrushRendererBrushCache.h"
 #include "render/AllocationTracker.h"
 
 #include "kd/contracts.h"
@@ -349,7 +350,9 @@ public:
 class BrushVertexArray
 {
 private:
-  using Vertex = gl::VertexTypes::P3NT2::Vertex;
+  // Must match the brush cache's vertex layout (P3NT2 + per-face luxel size) —
+  // BrushRenderer memcpys cached vertices straight into this array.
+  using Vertex = mdl::BrushRendererBrushCache::Vertex;
 
   VertexHolder<Vertex> m_vertexHolder;
   AllocationTracker m_allocationTracker;

@@ -27,9 +27,12 @@
 #include "mdl/Brush.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
+#include "mdl/BrushRendererBrushCache.h"
+#include "mdl/CompiledBsp.h"
 #include "mdl/EditorContext.h"
 #include "mdl/EntityModelManager.h"
 #include "mdl/EntityNode.h"
+#include "mdl/EntityNodeBase.h"
 #include "mdl/GameInfo.h"
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
@@ -39,7 +42,9 @@
 #include "mdl/PatchNode.h"
 #include "mdl/SelectionChange.h"
 #include "mdl/WorldNode.h"
+#include "Logger.h"
 #include "render/BrushRenderer.h"
+#include "render/CompiledBspRenderer.h"
 #include "render/EntityDecalRenderer.h"
 #include "render/EntityLinkRenderer.h"
 #include "render/GroupLinkRenderer.h"
@@ -205,6 +210,7 @@ MapRenderer::MapRenderer(mdl::Map& map)
   , m_entityDecalRenderer{createEntityDecalRenderer(m_map)}
   , m_entityLinkRenderer{std::make_unique<EntityLinkRenderer>(m_map)}
   , m_groupLinkRenderer{std::make_unique<GroupLinkRenderer>(m_map)}
+  , m_compiledBspRenderer{std::make_unique<CompiledBspRenderer>()}
 {
   connectObservers();
   setupRenderers();
@@ -236,6 +242,10 @@ void MapRenderer::restoreSelectionColors()
 void MapRenderer::render(RenderContext& renderContext, RenderBatch& renderBatch)
 {
   setupGL(renderBatch);
+  if (renderContext.showCompiledLighting())
+  {
+    renderCompiledBsp(renderBatch);
+  }
   renderEntityDecals(renderContext, renderBatch);
   renderEntityLinks(renderContext, renderBatch);
   renderGroupLinks(renderContext, renderBatch);
@@ -247,6 +257,44 @@ void MapRenderer::render(RenderContext& renderContext, RenderBatch& renderBatch)
   renderDefaultTransparent(renderContext, renderBatch);
   renderLockedTransparent(renderContext, renderBatch);
   renderSelectionTransparent(renderContext, renderBatch);
+}
+
+void MapRenderer::renderCompiledBsp(RenderBatch& renderBatch)
+{
+  // the compiled artifact lives next to the map file
+  const auto& mapPath = m_map.path();
+  auto bspPath = mapPath;
+  bspPath.replace_extension(".bsp");
+
+  auto ec = std::error_code{};
+  const auto mtime = std::filesystem::last_write_time(bspPath, ec);
+  if (ec)
+  {
+    if (m_compiledBspRenderer->valid())
+    {
+      m_compiledBspRenderer->clear();
+      m_map.logger().warn() << "Lit preview: " << bspPath.string() << " not found";
+    }
+    m_compiledBspPath.clear();
+    return;
+  }
+
+  if (
+    bspPath != m_compiledBspPath || mtime != m_compiledBspTime
+    || !m_compiledBspRenderer->valid())
+  {
+    m_compiledBspPath = bspPath;
+    m_compiledBspTime = mtime;
+    mdl::loadCompiledBsp(bspPath) | kdl::transform([&](auto bsp) {
+      m_compiledBspRenderer->setData(std::move(bsp), m_map.materialManager());
+      m_map.logger().info() << "Lit preview: loaded " << bspPath.string();
+    }) | kdl::transform_error([&](auto e) {
+      m_compiledBspRenderer->clear();
+      m_map.logger().warn() << "Lit preview: " << e.msg;
+    });
+  }
+
+  m_compiledBspRenderer->render(renderBatch);
 }
 
 class SetupGL : public Renderable
@@ -717,6 +765,26 @@ void MapRenderer::nodesDidChange(const std::vector<mdl::Node*>& nodes)
     // change.
     updateAndInvalidateNode(*node);
   }
+  // A brush entity's properties feed its brushes' cached vertex data (the lightmap
+  // luxel-size attribute), so a property edit must rebuild the child brush caches.
+  // Restricted to entities changed DIRECTLY (not the ancestors collected above, which
+  // include the world node on every change).
+  for (auto* node : nodes)
+  {
+    if (
+      dynamic_cast<mdl::EntityNodeBase*>(node) != nullptr
+      && dynamic_cast<mdl::WorldNode*>(node) == nullptr)
+    {
+      for (auto* child : node->children())
+      {
+        if (auto* brushNode = dynamic_cast<mdl::BrushNode*>(child))
+        {
+          brushNode->brushRendererBrushCache().invalidateVertexCache();
+          updateAndInvalidateNode(*brushNode);
+        }
+      }
+    }
+  }
   invalidateEntityLinkRenderer();
   invalidateGroupLinkRenderer();
 }
@@ -804,6 +872,9 @@ void MapRenderer::materialCollectionsWillChange()
 {
   invalidateRenderers(Renderer::All);
   invalidateEntityDecalRenderer();
+  // the lit preview holds raw Material pointers — drop it and reload on next use
+  m_compiledBspRenderer->clear();
+  m_compiledBspPath.clear();
 }
 
 void MapRenderer::entityDefinitionsDidChange()

@@ -41,6 +41,8 @@ private:
   SliderWithLabel* m_fovSlider = nullptr;
   QCheckBox* m_showAxes = nullptr;
   QComboBox* m_filterModeCombo = nullptr;
+  QCheckBox* m_anisotropy = nullptr;
+  SliderWithLabel* m_lodBiasSlider = nullptr;
   QCheckBox* m_enableMsaa = nullptr;
   QComboBox* m_themeCombo = nullptr;
   QComboBox* m_materialBrowserIconSizeCombo = nullptr;
@@ -70,6 +72,8 @@ private slots:
   void fovChanged(int value);
   void showAxesChanged(int state);
   void enableMsaaChanged(int state);
+  void anisotropyChanged(int state);
+  void lodBiasChanged(int value);
   void filterModeChanged(int index);
   void themeChanged(int index);
   void materialBrowserIconSizeChanged(int index);

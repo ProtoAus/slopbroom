@@ -22,11 +22,14 @@
 #include "mdl/BrushFace.h"
 #include "mdl/BrushGeometry.h"
 #include "mdl/BrushNode.h"
+#include "mdl/Entity.h"
+#include "mdl/EntityNodeBase.h"
 #include "mdl/Polyhedron.h"
 
 #include "kd/contracts.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace tb::mdl
 {
@@ -63,6 +66,19 @@ void BrushRendererBrushCache::validateVertexCache(const mdl::BrushNode& brushNod
   // build vertex cache and face cache
   const auto& brush = brushNode.brush();
 
+  // Lightmap luxel size for this brush's faces: the containing entity's
+  // _world_units_per_luxel (worldspawn carries the map default; func_group/func_detail
+  // carry per-area overrides — both survive into the compiled lightmap via ericw's
+  // extended texinfo). 0 = key absent = the luxel-grid overlay skips these faces.
+  auto luxelSize = 0.0f;
+  if (const auto* entityNode = brushNode.entity())
+  {
+    if (const auto* value = entityNode->entity().property("_world_units_per_luxel"))
+    {
+      luxelSize = static_cast<float>(std::atof(value->c_str()));
+    }
+  }
+
   m_cachedVertices.clear();
   m_cachedVertices.reserve(brush.vertexCount());
 
@@ -89,7 +105,10 @@ void BrushRendererBrushCache::validateVertexCache(const mdl::BrushNode& brushNod
 
       const auto& position = vertex->position();
       m_cachedVertices.emplace_back(
-        vm::vec3f{position}, vm::vec3f{face.boundary().normal}, face.uvCoords(position));
+        vm::vec3f{position},
+        vm::vec3f{face.boundary().normal},
+        face.uvCoords(position),
+        vm::vec<float, 1>{luxelSize});
 
       currentHalfEdge = currentHalfEdge->previous();
     }

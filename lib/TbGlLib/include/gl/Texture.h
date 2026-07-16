@@ -151,7 +151,12 @@ public:
 
   bool isReady() const;
 
-  bool activate(Gl& gl, int minFilter, int magFilter) const;
+  bool activate(
+    Gl& gl,
+    int minFilter,
+    int magFilter,
+    float anisotropy = 1.0f,
+    float lodBias = 0.0f) const;
   bool deactivate(Gl& gl) const;
 
   void upload(Gl& gl);
@@ -160,7 +165,13 @@ public:
   const std::vector<TextureBuffer>& buffersIfLoaded() const;
 
 private:
-  void setFilterMode(Gl& gl, int minFilter, int magFilter, bool useMipmap) const;
+  void setFilterMode(
+    Gl& gl,
+    int minFilter,
+    int magFilter,
+    bool useMipmap,
+    float anisotropy = 1.0f,
+    float lodBias = 0.0f) const;
 };
 
 } // namespace tb::gl

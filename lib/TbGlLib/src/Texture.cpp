@@ -27,6 +27,8 @@
 #include "kd/reflection_impl.h"
 #include "kd/vector_utils.h"
 
+#include <algorithm>
+
 #include "vm/vec_io.h" // IWYU pragma: keep
 
 namespace tb::gl
@@ -285,14 +287,20 @@ bool Texture::isReady() const
   return std::holds_alternative<TextureReadyState>(m_state);
 }
 
-bool Texture::activate(Gl& gl, const int minFilter, const int magFilter) const
+bool Texture::activate(
+  Gl& gl,
+  const int minFilter,
+  const int magFilter,
+  const float anisotropy,
+  const float lodBias) const
 {
   return std::visit(
     kdl::overload(
       [](const TextureLoadedState&) { return false; },
       [&](const TextureReadyState& readyState) {
         gl.bindTexture(GL_TEXTURE_2D, readyState.textureId);
-        setFilterMode(gl, minFilter, magFilter, readyState.useMipmap);
+        setFilterMode(
+          gl, minFilter, magFilter, readyState.useMipmap, anisotropy, lodBias);
         return true;
       },
       [](const TextureDroppedState&) { return false; }),
@@ -357,8 +365,30 @@ const std::vector<TextureBuffer>& Texture::buffersIfLoaded() const
 }
 
 
+// The largest anisotropy the driver supports, queried once. 0 = not yet queried,
+// <=1 (or 1 after a failed query) = the EXT_texture_filter_anisotropic extension is absent.
+float maxSupportedAnisotropy(Gl& gl)
+{
+  static auto cached = 0.0f;
+  if (cached == 0.0f)
+  {
+    cached = 1.0f; // default = "unsupported" if the query leaves it untouched
+    gl.getFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &cached);
+    if (!(cached >= 1.0f))
+    {
+      cached = 1.0f;
+    }
+  }
+  return cached;
+}
+
 void Texture::setFilterMode(
-  Gl& gl, const int minFilter, const int magFilter, const bool useMipmap) const
+  Gl& gl,
+  const int minFilter,
+  const int magFilter,
+  const bool useMipmap,
+  const float anisotropy,
+  const float lodBias) const
 {
   if (m_mask == TextureMask::On)
   {
@@ -372,6 +402,20 @@ void Texture::setFilterMode(
       GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, textureFilterMode(minFilter, useMipmap));
     gl.texParameteri(
       GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, textureFilterMode(magFilter, useMipmap));
+
+    // Anisotropic filtering only helps a mipmapped minification; it needs the extension.
+    const auto level = useMipmap
+      ? std::min(anisotropy, maxSupportedAnisotropy(gl))
+      : 1.0f;
+    if (maxSupportedAnisotropy(gl) > 1.0f)
+    {
+      gl.texParameterf(
+        GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, std::max(level, 1.0f));
+    }
+
+    // How eagerly the GPU drops to a blurrier mip. Negative keeps a sharper level in use
+    // further out (at some shimmer risk), positive blurs sooner. Only meaningful with mips.
+    gl.texParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, useMipmap ? lodBias : 0.0f);
   }
 }
 

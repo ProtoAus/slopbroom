@@ -100,6 +100,9 @@ private:
   QCheckBox* m_shadeFacesCheckBox = nullptr;
   QCheckBox* m_showFogCheckBox = nullptr;
   QCheckBox* m_showEdgesCheckBox = nullptr;
+  QCheckBox* m_showLightmapGridCheckBox = nullptr;
+  QCheckBox* m_showCompiledLightingCheckBox = nullptr;
+  QCheckBox* m_lightmapOnlyCheckBox = nullptr;
 
   QButtonGroup* m_entityLinkRadioGroup = nullptr;
 
@@ -147,6 +150,9 @@ private:
   void shadeFacesChanged(bool checked);
   void showFogChanged(bool checked);
   void showEdgesChanged(bool checked);
+  void showLightmapGridChanged(bool checked);
+  void showCompiledLightingChanged(bool checked);
+  void lightmapOnlyChanged(bool checked);
   void entityLinkModeChanged(int id);
   void showSoftMapBoundsChanged(bool checked);
   void restoreDefaultsClicked();

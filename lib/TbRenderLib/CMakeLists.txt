@@ -9,6 +9,7 @@ target_sources(TbRenderLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Circle.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Compass.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Compass2D.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/CompiledBspRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Compass3D.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EdgeRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityDecalRenderer.cpp

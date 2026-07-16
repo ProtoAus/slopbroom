@@ -47,6 +47,8 @@ private:
   Color m_defaultColor;
   int m_minFilter;
   int m_magFilter;
+  float m_anisotropy;
+  float m_lodBias;
 
 public:
   RenderFunc(
@@ -54,12 +56,16 @@ public:
     const bool applyMaterial,
     Color defaultColor,
     const int minFilter,
-    const int magFilter)
+    const int magFilter,
+    const float anisotropy,
+    const float lodBias)
     : m_shader{shader}
     , m_applyMaterial{applyMaterial}
     , m_defaultColor{std::move(defaultColor)}
     , m_minFilter{minFilter}
     , m_magFilter{magFilter}
+    , m_anisotropy{anisotropy}
+    , m_lodBias{lodBias}
   {
   }
 
@@ -67,7 +73,7 @@ public:
   {
     if (const auto* texture = gl::getTexture(material))
     {
-      material->activate(gl, m_minFilter, m_magFilter);
+      material->activate(gl, m_minFilter, m_magFilter, m_anisotropy, m_lodBias);
       m_shader.set("ApplyMaterial", m_applyMaterial);
       m_shader.set("Color", texture->averageColor());
     }
@@ -168,6 +174,8 @@ void FaceRenderer::render(RenderContext& context)
     shader.set("CameraPosition", context.camera().position());
     shader.set("ShadeFaces", shadeFaces);
     shader.set("ShowFog", showFog);
+    shader.set("ShowLuxelGrid", context.showLightmapGrid());
+    shader.set("LuxelGridColor", vm::vec3f{1.0f, 0.65f, 0.1f});
     shader.set("Alpha", m_alpha);
     shader.set("EnableMasked", false);
     shader.set("ShowSoftMapBounds", !context.softMapBounds().is_empty());
@@ -182,7 +190,9 @@ void FaceRenderer::render(RenderContext& context)
       applyMaterial,
       m_faceColor,
       context.minFilterMode(),
-      context.magFilterMode()};
+      context.magFilterMode(),
+      context.anisotropy(),
+      context.lodBias()};
 
     if (m_alpha < 1.0f)
     {

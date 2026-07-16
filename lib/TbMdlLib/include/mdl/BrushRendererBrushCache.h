@@ -19,8 +19,10 @@
 
 #pragma once
 
+#include "gl/VertexAttributeType.h"
 #include "gl/VertexType.h"
 
+#include <string>
 #include <vector>
 
 namespace tb
@@ -35,10 +37,24 @@ namespace mdl
 class BrushNode;
 class BrushFace;
 
+/**
+ * Name of the per-vertex lightmap luxel size attribute (world units per luxel for the
+ * face's lightmap; 0 when the containing entity sets none). Consumed by the Face
+ * shader's luxel-grid overlay; other shaders sharing the brush VBO simply skip it.
+ */
+struct BrushLuxelSizeAttrName
+{
+  static inline const std::string name{"LuxelSize"};
+};
+
 class BrushRendererBrushCache
 {
 public:
-  using VertexSpec = gl::VertexTypes::P3NT2;
+  using VertexSpec = gl::VertexType<
+    gl::VertexAttributeTypes::P3,
+    gl::VertexAttributeTypes::N,
+    gl::VertexAttributeTypes::UV02,
+    gl::GLVertexAttributeUser<BrushLuxelSizeAttrName, GL_FLOAT, 1, false>>;
   using Vertex = VertexSpec::Vertex;
 
   struct CachedFace

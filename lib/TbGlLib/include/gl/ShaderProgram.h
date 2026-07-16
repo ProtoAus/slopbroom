@@ -85,6 +85,14 @@ public:
 
   GLint findAttributeLocation(Gl& gl, const std::string& name) const;
 
+  /**
+   * Like findAttributeLocation, but returns -1 instead of asserting when the program
+   * does not declare the attribute. Needed for vertex formats shared between shaders
+   * that only partially consume them (e.g. the brush VBO set up against the Edge
+   * shader, which has no use for the face-only attributes).
+   */
+  GLint tryFindAttributeLocation(Gl& gl, const std::string& name) const;
+
   void destroy(Gl& gl);
 
 private:

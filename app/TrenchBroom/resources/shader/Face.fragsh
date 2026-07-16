@@ -33,11 +33,14 @@ uniform float GridAlpha;
 uniform vec3 GridColor;
 uniform bool ShadeFaces;
 uniform bool ShowFog;
+uniform bool ShowLuxelGrid;
+uniform vec3 LuxelGridColor;
 
 varying vec4 modelCoordinates;
 varying vec3 modelNormal;
 varying vec4 faceColor;
 varying vec3 viewVector;
+varying float luxelSize;
 
 float grid(
   vec3 coords, vec3 normal, float gridSize, float minGridSize, float lineWidthFactor);
@@ -122,6 +125,17 @@ void main()
 
     float gridValue = grid(coords, modelNormal.xyz, GridSize, minGridSize, 1.0);
     gl_FragColor.rgb = mix(gl_FragColor.rgb, GridColor, gridValue * GridAlpha);
+  }
+
+  // Hammer-style lightmap luxel grid: world-unit spacing per face, carried in the
+  // luxelSize attribute (faces without a _world_units_per_luxel key draw nothing).
+  if (ShowLuxelGrid && luxelSize > 0.0)
+  {
+    vec3 coords = modelCoordinates.xyz;
+    float maxWorldSpaceChange = max(length(dFdx(coords)), length(dFdy(coords)));
+    float minGridSize = 2.0 * maxWorldSpaceChange;
+    float luxelValue = grid(coords, modelNormal.xyz, luxelSize, minGridSize, 0.5);
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, LuxelGridColor, luxelValue * 0.5);
   }
 
   gl_FragColor.rgb = applySoftMapBoundsTint(gl_FragColor.rgb, modelCoordinates.xyz);

@@ -230,10 +230,15 @@ void Material::decUsageCount() const
   contract_assert(previous > 0);
 }
 
-void Material::activate(Gl& gl, const int minFilter, const int magFilter) const
+void Material::activate(
+  Gl& gl,
+  const int minFilter,
+  const int magFilter,
+  const float anisotropy,
+  const float lodBias) const
 {
   if (const auto* texture = m_textureResource->get();
-      texture && texture->activate(gl, minFilter, magFilter))
+      texture && texture->activate(gl, minFilter, magFilter, anisotropy, lodBias))
   {
     switch (m_culling)
     {

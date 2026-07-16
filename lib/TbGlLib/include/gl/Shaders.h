@@ -72,6 +72,12 @@ inline const ShaderConfig EdgeShader = ShaderConfig{
   {"MapBounds.fragsh", "Edge.fragsh"},
 };
 
+inline const ShaderConfig LitBspShader = ShaderConfig{
+  "Lit BSP Preview",
+  {"LitBsp.vertsh"},
+  {"LitBsp.fragsh"},
+};
+
 inline const ShaderConfig ColoredTextShader = ShaderConfig{
   "Colored Text",
   {"ColoredText.vertsh"},

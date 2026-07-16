@@ -328,18 +328,24 @@ struct RenderFunc : public gl::MaterialRenderFunc
   const Color& defaultColor;
   int minFilter;
   int magFilter;
+  float anisotropy;
+  float lodBias;
 
   RenderFunc(
     gl::ActiveShader& i_shader,
     const bool i_applyMaterial,
     const Color& i_defaultColor,
     const int i_minFilter,
-    const int i_magFilter)
+    const int i_magFilter,
+    const float i_anisotropy,
+    const float i_lodBias)
     : shader{i_shader}
     , applyMaterial{i_applyMaterial}
     , defaultColor{i_defaultColor}
     , minFilter{i_minFilter}
     , magFilter{i_magFilter}
+    , anisotropy{i_anisotropy}
+    , lodBias{i_lodBias}
   {
   }
 
@@ -348,7 +354,7 @@ struct RenderFunc : public gl::MaterialRenderFunc
     shader.set("GridColor", gridColorForMaterial(material));
     if (const auto* texture = getTexture(material))
     {
-      material->activate(gl, minFilter, magFilter);
+      material->activate(gl, minFilter, magFilter, anisotropy, lodBias);
       shader.set("ApplyMaterial", applyMaterial);
       shader.set("Color", texture->averageColor());
     }
@@ -412,7 +418,9 @@ void PatchRenderer::render(RenderContext& context)
     applyMaterial,
     m_defaultColor,
     context.minFilterMode(),
-    context.magFilterMode()};
+    context.magFilterMode(),
+    context.anisotropy(),
+    context.lodBias()};
 
   /*
   if (m_alpha < 1.0f) {

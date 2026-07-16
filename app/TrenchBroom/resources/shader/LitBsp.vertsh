@@ -1,0 +1,20 @@
+#version 120
+
+/*
+ Lit preview: renders the compiled .bsp's faces. Texture coordinates arrive in TEXEL
+ space and are divided by the bound material's size here, so -notex placeholder sizes
+ in the bsp don't matter. Lightmap UVs address the packed lightmap atlas directly.
+ */
+
+uniform vec2 TextureSize;
+
+attribute vec2 LightmapUV;
+
+varying vec2 lightmapUV;
+
+void main(void)
+{
+  gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * gl_Vertex;
+  gl_TexCoord[0] = vec4(gl_MultiTexCoord0.xy / TextureSize, 0.0, 1.0);
+  lightmapUV = LightmapUV;
+}

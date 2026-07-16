@@ -65,6 +65,8 @@ private:
 
   int m_textureMinFilter = GL_NEAREST_MIPMAP_NEAREST;
   int m_textureMagFilter = GL_NEAREST;
+  float m_textureAnisotropy = 1.0f;
+  float m_textureLodBias = 0.0f;
 
   // settings for any map rendering view
   bool m_showMaterials = true;
@@ -81,6 +83,10 @@ private:
   bool m_showPointEntityBounds = true;
 
   bool m_showFog = false;
+
+  bool m_showLightmapGrid = false;
+
+  bool m_showCompiledLighting = false;
 
   bool m_showGrid = true;
   double m_gridSize = 4;
@@ -114,7 +120,11 @@ public:
 
   int minFilterMode() const;
   int magFilterMode() const;
+  float anisotropy() const;
+  float lodBias() const;
   void setFilterMode(int minFilter, int magFilter);
+  void setAnisotropy(float anisotropy);
+  void setLodBias(float lodBias);
 
   bool showMaterials() const;
   void setShowMaterials(bool showMaterials);
@@ -148,6 +158,12 @@ public:
 
   bool showFog() const;
   void setShowFog(bool showFog);
+
+  bool showLightmapGrid() const;
+  void setShowLightmapGrid(bool showLightmapGrid);
+
+  bool showCompiledLighting() const;
+  void setShowCompiledLighting(bool showCompiledLighting);
 
   bool showGrid() const;
   void setShowGrid(bool showGrid);

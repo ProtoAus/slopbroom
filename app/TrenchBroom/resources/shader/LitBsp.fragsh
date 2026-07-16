@@ -1,0 +1,34 @@
+#version 120
+
+/*
+ Lit preview: texture x lightmap x 2 (FTE-style overbright), scaled by the editor
+ Brightness preference like ordinary faces.
+ */
+
+uniform bool ApplyMaterial;
+uniform bool EnableMasked;
+uniform bool LightmapOnly;
+uniform sampler2D Material;
+uniform sampler2D Lightmap;
+uniform float Brightness;
+
+varying vec2 lightmapUV;
+
+void main(void)
+{
+  vec4 texel = ApplyMaterial ? texture2D(Material, gl_TexCoord[0].st)
+                             : vec4(0.6, 0.6, 0.6, 1.0);
+
+  if (EnableMasked && texel.a < 0.5)
+  {
+    discard;
+  }
+
+  // Lightmap-only swaps the texel for white so the baked light reads at its true value
+  // (the material is still sampled above, so masked cutouts keep working). Same x2
+  // overbright + Brightness as the textured view, so it is that view's lighting layer.
+  vec3 lightmap = texture2D(Lightmap, lightmapUV).rgb;
+  vec3 base = LightmapOnly ? vec3(1.0, 1.0, 1.0) : texel.rgb;
+  vec3 color = base * lightmap * 2.0;
+  gl_FragColor = vec4(clamp(color * Brightness, 0.0, 1.0), 1.0);
+}

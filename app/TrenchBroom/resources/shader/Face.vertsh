@@ -22,10 +22,14 @@
 uniform vec4 Color;
 uniform vec3 CameraPosition;
 
+// world units per lightmap luxel for this face (0 = no _world_units_per_luxel key)
+attribute float LuxelSize;
+
 varying vec4 modelCoordinates;
 varying vec3 modelNormal;
 varying vec4 faceColor;
 varying vec3 viewVector;
+varying float luxelSize;
 
 void main(void)
 {
@@ -35,4 +39,5 @@ void main(void)
   modelNormal = gl_Normal;
   faceColor = Color;
   viewVector = CameraPosition - gl_Vertex.xyz;
+  luxelSize = LuxelSize;
 }

@@ -56,19 +56,22 @@ struct FilterMode
   std::string name;
 };
 
-const auto FilterModes = std::array<FilterMode, 6>{
-  FilterMode{GL_NEAREST, GL_NEAREST, "Nearest"},
-  FilterMode{GL_NEAREST_MIPMAP_NEAREST, GL_NEAREST, "Nearest (mipmapped)"},
-  FilterMode{GL_NEAREST_MIPMAP_LINEAR, GL_NEAREST, "Nearest (mipmapped, interpolated)"},
-  FilterMode{GL_LINEAR, GL_LINEAR, "Linear"},
-  FilterMode{GL_LINEAR_MIPMAP_NEAREST, GL_LINEAR, "Linear (mipmapped)"},
-  FilterMode{GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, "Linear (mipmapped, interpolated)"},
+// This combo only picks the CLOSE-UP look (the mag filter): Nearest = sharp texels,
+// Bilinear = smoothed. Minification is always trilinear so distance stays clean — using
+// nearest for minification is what makes distant surfaces read blocky AND shimmery, since
+// it point-samples one texel out of a shrinking footprint. Sharpness at distance is then
+// tuned with anisotropic filtering and the LOD bias, not by degrading the min filter.
+const auto FilterModes = std::array<FilterMode, 2>{
+  FilterMode{GL_LINEAR_MIPMAP_LINEAR, GL_NEAREST, "Nearest"},
+  FilterMode{GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, "Bilinear"},
 };
 
 std::optional<size_t> findFilterMode(const int minFilter, const int magFilter)
 {
+  // match on the mag filter (the crisp-vs-smooth choice); tolerates any stored min value
+  // from an older 6-preset config.
   return kdl::index_of(FilterModes, [&](const FilterMode& filterMode) {
-    return filterMode.minFilter == minFilter && filterMode.magFilter == magFilter;
+    return filterMode.magFilter == magFilter;
   });
 }
 
@@ -83,6 +86,19 @@ constexpr float brightnessFromUI(const int value)
 }
 
 static_assert(0 == brightnessToUI(brightnessFromUI(0)));
+
+// LOD bias slider: UI -100..100 maps to a bias of -2..+2 mip levels.
+constexpr int lodBiasToUI(const float value)
+{
+  return int(vm::round(50.0f * value));
+}
+
+constexpr float lodBiasFromUI(const int value)
+{
+  return float(value) / 50.0f;
+}
+
+static_assert(0 == lodBiasToUI(lodBiasFromUI(0)));
 
 } // namespace
 
@@ -161,11 +177,23 @@ QWidget* ViewPreferencePane::createViewPreferences()
     "Toggle showing the coordinate system axes in the 3D editing view.");
 
   m_filterModeCombo = new QComboBox{};
-  m_filterModeCombo->setToolTip("Sets the texture filtering mode in the editing views.");
+  m_filterModeCombo->setToolTip(
+    "Texture look in the editing views: Nearest = crisp pixels, Bilinear = smoothed.");
   for (const auto& filterMode : FilterModes)
   {
     m_filterModeCombo->addItem(QString::fromStdString(filterMode.name));
   }
+
+  m_anisotropy = new QCheckBox{};
+  m_anisotropy->setToolTip(
+    "Anisotropic filtering (16x) sharpens distant and steeply-angled surfaces.");
+
+  m_lodBiasSlider = new SliderWithLabel{lodBiasToUI(-2.0f), lodBiasToUI(2.0f)};
+  m_lodBiasSlider->setMaximumWidth(400);
+  m_lodBiasSlider->setToolTip(
+    "Mipmap LOD bias: how eagerly distant surfaces drop to a blurrier mip level. "
+    "Negative keeps a sharper level in use further out (too far negative reintroduces "
+    "shimmer), positive blurs sooner. 0 = driver default.");
 
   m_enableMsaa = new QCheckBox{};
   m_enableMsaa->setToolTip("Enable multisampling");
@@ -225,7 +253,9 @@ QWidget* ViewPreferencePane::createViewPreferences()
   layout->addRow("Grid", m_gridAlphaSlider);
   layout->addRow("FOV", m_fovSlider);
   layout->addRow("Show axes", m_showAxes);
-  layout->addRow("Filter mode", m_filterModeCombo);
+  layout->addRow("Texture filter", m_filterModeCombo);
+  layout->addRow("Anisotropic filtering", m_anisotropy);
+  layout->addRow("Mip LOD bias", m_lodBiasSlider);
   layout->addRow("Enable multisampling", m_enableMsaa);
 
   layout->addSection("Material Browser");
@@ -271,6 +301,16 @@ void ViewPreferencePane::bindEvents()
     &QCheckBox::checkStateChanged,
     this,
     &ViewPreferencePane::showAxesChanged);
+  connect(
+    m_anisotropy,
+    &QCheckBox::checkStateChanged,
+    this,
+    &ViewPreferencePane::anisotropyChanged);
+  connect(
+    m_lodBiasSlider,
+    &SliderWithLabel::valueChanged,
+    this,
+    &ViewPreferencePane::lodBiasChanged);
   connect(
     m_enableMsaa,
     &QCheckBox::checkStateChanged,
@@ -327,6 +367,8 @@ void ViewPreferencePane::doResetToDefaults()
   prefs.resetToDefault(Preferences::EnableMSAA);
   prefs.resetToDefault(Preferences::TextureMinFilter);
   prefs.resetToDefault(Preferences::TextureMagFilter);
+  prefs.resetToDefault(Preferences::TextureAnisotropy);
+  prefs.resetToDefault(Preferences::TextureLodBias);
   prefs.resetToDefault(Preferences::Theme);
   prefs.resetToDefault(Preferences::MaterialBrowserIconSize);
   prefs.resetToDefault(Preferences::RendererFontSize);
@@ -371,6 +413,9 @@ void ViewPreferencePane::updateControls()
   }
 
   m_showAxes->setChecked(prefs.getPendingValue(Preferences::ShowAxes));
+  m_anisotropy->setChecked(prefs.getPendingValue(Preferences::TextureAnisotropy));
+  m_lodBiasSlider->setValue(
+    lodBiasToUI(prefs.getPendingValue(Preferences::TextureLodBias)));
   m_enableMsaa->setChecked(prefs.getPendingValue(Preferences::EnableMSAA));
   m_themeCombo->setCurrentIndex(
     findThemeIndex(QString::fromStdString(prefs.getPendingValue(Preferences::Theme))));
@@ -471,6 +516,19 @@ void ViewPreferencePane::enableMsaaChanged(const int state)
   const auto value = state == Qt::Checked;
   auto& prefs = PreferenceManager::instance();
   prefs.set(Preferences::EnableMSAA, value);
+}
+
+void ViewPreferencePane::anisotropyChanged(const int state)
+{
+  const auto value = state == Qt::Checked;
+  auto& prefs = PreferenceManager::instance();
+  prefs.set(Preferences::TextureAnisotropy, value);
+}
+
+void ViewPreferencePane::lodBiasChanged(const int value)
+{
+  auto& prefs = PreferenceManager::instance();
+  prefs.set(Preferences::TextureLodBias, lodBiasFromUI(value));
 }
 
 void ViewPreferencePane::filterModeChanged(const int value)

@@ -38,11 +38,13 @@
 #include "kd/ranges/to.h"
 
 #include "vm/intersection.h"
+#include "vm/scalar.h"
 
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <ranges>
+#include <tuple>
 
 namespace tb::render
 {
@@ -60,7 +62,10 @@ std::optional<mdl::DecalSpecification> getDecalSpecification(
          | kdl::value_or(std::nullopt);
 }
 
-using Vertex = gl::VertexTypes::P3NT2::Vertex;
+// Must match BrushVertexArray's layout (P3NT2 + LuxelSize) — the built decal vertices are
+// flat-memcpy'd into that array, so a plain P3NT2 here would mismatch the stride and fling
+// vertices. The luxel-size component is 0 (decals get no lightmap-grid overlay).
+using Vertex = mdl::BrushRendererBrushCache::Vertex;
 std::vector<Vertex> createDecalBrushFace(
   const mdl::EntityNode& entityNode,
   const mdl::BrushNode& brushNode,
@@ -113,6 +118,27 @@ std::vector<Vertex> createDecalBrushFace(
   const auto plane = face.boundary();
   const auto origin = entityNode.physicalBounds().center();
   const auto center = plane.project_point(origin);
+
+  // Spin the decal about the surface normal by the entity's `angle` key (degrees), so the
+  // projected texture rotates live. Rotating the UV coord system's axes drives the quad
+  // extent, the UV offset and uvCoords() below in lock-step. Mirrors the in-game rotation
+  // (cl_infodecal.qc rotates the decal quad's tangent/bitangent by the same angle).
+  if (const auto* angleStr = entityNode.entity().property("angle");
+      angleStr != nullptr && !angleStr->empty())
+  {
+    char* end = nullptr;
+    if (const auto angleDeg = std::strtod(angleStr->c_str(), &end);
+        end != angleStr->c_str() && angleDeg != 0.0)
+    {
+      // setRotation() ignores the passed normal and rotates CCW about cross(uAxis, vAxis),
+      // which is +plane.normal on walls but -plane.normal on floors/ceilings (opposite Valve
+      // axis handedness). Fold in the per-face handedness so the decal always spins CCW about
+      // the outward face normal, matching the in-game cl_infodecal.qc rotation.
+      const auto handedness = float(vm::sign(
+        vm::dot(vm::cross(uvCoordSystem->uAxis(), uvCoordSystem->vAxis()), plane.normal)));
+      uvCoordSystem->setRotation(plane.normal, 0.0f, float(angleDeg) * handedness);
+    }
+  }
 
   // re-project the vertices in case the UV axes are not on the face plane. The decalScale lives
   // in attrs' UV scale now, so the quad and the UVs stay in lock-step (no tiling).
@@ -173,7 +199,7 @@ std::vector<Vertex> createDecalBrushFace(
   const auto norm = vm::vec3f{plane.normal};
   return verts | std::views::transform([&](const auto& v) {
            const auto uv = uvCoordSystem->uvCoords(v, attrs, textureSize);
-           return Vertex{vm::vec3f{v}, norm, uv};
+           return Vertex{vm::vec3f{v}, norm, uv, vm::vec<float, 1>{0.0f}};
          })
          | kdl::ranges::to<std::vector>();
 }
@@ -359,9 +385,14 @@ void EntityDecalRenderer::validateDecalData(
   const auto& editorContext = m_map.editorContext();
   const auto& worldNode = m_map.worldNode();
 
-  // collect all the brush nodes that touch the entity's bbox
-  const auto entityBounds = entityNode.physicalBounds();
-  const auto intersectors = worldNode.nodeTree().find_intersectors(entityBounds);
+  // Decal reach — mirror the engine's expanding host-face trace (sv_infodecal.qc), which searches
+  // out to 16 units. The infodecal marker bbox (±2) is far smaller than that, so probe candidates
+  // with a 16-unit reach box centred on the decal origin.
+  const auto DecalReach = 16.0; // keep in sync with INFODECAL_MAXREACH (sv_infodecal.qc)
+  const auto origin = entityNode.physicalBounds().center();
+  const auto reachBounds =
+    vm::bbox3d{origin - vm::vec3d{DecalReach}, origin + vm::vec3d{DecalReach}};
+  const auto intersectors = worldNode.nodeTree().find_intersectors(reachBounds);
 
   // track them in the entity
   data.brushes.clear();
@@ -389,11 +420,25 @@ void EntityDecalRenderer::validateDecalData(
   // do not want to place a decal on it. To achieve this logic, we shrink the bounds
   // just a tiny bit so adjacent faces that don't actually breach the entity's bounding
   // box are excluded.
-  const auto shrunkBounds = entityBounds.expand(-vm::Cd::almost_zero());
+  const auto shrunkBounds = reachBounds.expand(-vm::Cd::almost_zero());
 
   // create geometry for the decal
   auto vertices = std::vector<Vertex>{};
   auto indices = std::vector<size_t>{};
+
+  // Mirror the engine's single-winner selection: among every face the reach box breaches, pick
+  // exactly ONE — nearest by the same reach ladder (1,2,4,8,16), then wall > floor > ceiling, then
+  // raw distance — so the editor previews the decal on the one surface the engine will choose
+  // (instead of painting every overlapping face with no priority).
+  struct Candidate
+  {
+    const mdl::BrushNode* brushNode;
+    const mdl::BrushFace* face;
+    int bucket;  // reach ladder rung the face falls in (1,2,4,8,16)
+    int pclass;  // 0 = wall, 1 = floor, 2 = ceiling
+    double dist; // perpendicular distance origin → face plane
+  };
+  auto candidates = std::vector<Candidate>{};
 
   for (const auto* brushNode : data.brushes)
   {
@@ -401,26 +446,49 @@ void EntityDecalRenderer::validateDecalData(
     {
       // see if this decal can be projected onto this face
       const auto facePolygon = face.geometry()->vertexPositions();
-      if (vm::intersect_bbox_polygon(
+      if (!vm::intersect_bbox_polygon(
             shrunkBounds, facePolygon.begin(), facePolygon.end()))
       {
-        contract_assert(data.material);
-        const auto decalPolygon =
-          createDecalBrushFace(entityNode, *brushNode, face, *data.material);
-        if (!decalPolygon.empty())
-        {
-          // add the geometry to be uploaded into the VBO
-          const auto vertexOffset = vertices.size();
-
-          vertices.insert(vertices.end(), decalPolygon.begin(), decalPolygon.end());
-          for (size_t i = 0; i < decalPolygon.size() - 2; ++i)
-          {
-            indices.push_back(vertexOffset);
-            indices.push_back(vertexOffset + i + 1);
-            indices.push_back(vertexOffset + i + 2);
-          }
-        }
+        continue;
       }
+      const auto plane = face.boundary();
+      const auto dist = vm::abs(plane.point_distance(origin));
+      const auto bucket = dist <= 1.0   ? 1
+                          : dist <= 2.0 ? 2
+                          : dist <= 4.0 ? 4
+                          : dist <= 8.0 ? 8
+                                        : 16;
+      const auto pclass =
+        vm::abs(plane.normal.z()) < 0.5 ? 0 : (plane.normal.z() > 0.0 ? 1 : 2);
+      candidates.push_back({brushNode, &face, bucket, pclass, dist});
+    }
+  }
+
+  // rank: nearest reach bucket, then wall/floor/ceiling priority, then raw distance
+  std::sort(
+    candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
+      return std::tie(a.bucket, a.pclass, a.dist) < std::tie(b.bucket, b.pclass, b.dist);
+    });
+
+  // project in ranked order, keep the first face that yields a non-empty (post-clip) quad
+  for (const auto& c : candidates)
+  {
+    contract_assert(data.material);
+    const auto decalPolygon =
+      createDecalBrushFace(entityNode, *c.brushNode, *c.face, *data.material);
+    if (!decalPolygon.empty())
+    {
+      // add the geometry to be uploaded into the VBO
+      const auto vertexOffset = vertices.size();
+
+      vertices.insert(vertices.end(), decalPolygon.begin(), decalPolygon.end());
+      for (size_t i = 0; i < decalPolygon.size() - 2; ++i)
+      {
+        indices.push_back(vertexOffset);
+        indices.push_back(vertexOffset + i + 1);
+        indices.push_back(vertexOffset + i + 2);
+      }
+      break; // single winner, like the engine
     }
   }
 

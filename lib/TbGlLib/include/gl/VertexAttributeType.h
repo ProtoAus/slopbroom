@@ -56,7 +56,13 @@ public:
     const size_t stride,
     const size_t offset)
   {
-    const auto attributeIndex = program.findAttributeLocation(gl, A::name);
+    // A program that doesn't declare the attribute simply skips it — the same vertex
+    // buffer may be set up against several shaders (brush faces vs. edges).
+    const auto attributeIndex = program.tryFindAttributeLocation(gl, A::name);
+    if (attributeIndex < 0)
+    {
+      return;
+    }
     gl.enableVertexAttribArray(static_cast<GLuint>(attributeIndex));
     gl.vertexAttribPointer(
       static_cast<GLuint>(attributeIndex),
@@ -69,7 +75,11 @@ public:
 
   static void cleanup(Gl& gl, ShaderProgram& program, const size_t /* index */)
   {
-    const auto attributeIndex = program.findAttributeLocation(gl, A::name);
+    const auto attributeIndex = program.tryFindAttributeLocation(gl, A::name);
+    if (attributeIndex < 0)
+    {
+      return;
+    }
     gl.disableVertexAttribArray(static_cast<GLuint>(attributeIndex));
   }
 

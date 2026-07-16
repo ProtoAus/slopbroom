@@ -196,13 +196,22 @@ inline auto AngleIndicatorColor =
 inline auto TextureSeamColor =
   Preference<Color>{"render/Colors/Texture seam", RgbF{1.0f, 1.0f, 0.0f}};
 
-inline auto Brightness = Preference<float>{"render/Brightness", 1.4f};
+// 1.0 = file-accurate color. The upstream 1.4 default is applied as clamp(b * rgb) in
+// Face.fragsh and MaterialBrowser.fragsh, which clips every texel above ~183/255 to
+// white and washes out bright true-color textures.
+inline auto Brightness = Preference<float>{"render/Brightness", 1.0f};
 inline auto GridAlpha = Preference<float>{"render/Grid/Alpha", 0.5f};
 inline auto GridColor2D =
   Preference<Color>{"render/Grid/Color2D", RgbaF{0.8f, 0.8f, 0.8f, 0.8f}};
 
-inline auto TextureMinFilter = Preference<int>{"render/Texture mode min filter", 0x2700};
+// Min is always GL_LINEAR_MIPMAP_LINEAR (trilinear = clean minification); the "Texture
+// filter" combo only picks mag: GL_NEAREST (sharp texels) or GL_LINEAR (smoothed).
+// Anisotropy + LOD bias tune how sharp the distance is. Negative bias pulls in a sharper
+// mip (later transition to blur), positive pushes blur closer; 0 = driver default.
+inline auto TextureMinFilter = Preference<int>{"render/Texture mode min filter", 0x2703};
 inline auto TextureMagFilter = Preference<int>{"render/Texture mode mag filter", 0x2600};
+inline auto TextureAnisotropy = Preference<bool>{"render/Anisotropic filtering", true};
+inline auto TextureLodBias = Preference<float>{"render/Texture LOD bias", 0.0f};
 inline auto EnableMSAA = Preference<bool>{"render/Enable multisampling", true};
 
 inline auto AlignmentLock = Preference<bool>{"Editor/Texture lock", true};
@@ -298,6 +307,11 @@ inline auto FaceRenderMode =
 inline auto ShadeFaces = Preference<bool>{"Map view/Shade faces", true};
 inline auto ShowFog = Preference<bool>{"Map view/Show fog", false};
 inline auto ShowEdges = Preference<bool>{"Map view/Show edges", true};
+inline auto ShowLightmapGrid = Preference<bool>{"Map view/Show lightmap grid", false};
+inline auto ShowCompiledLighting =
+  Preference<bool>{"Map view/Show compiled lighting", false};
+// Sub-option of ShowCompiledLighting: draw the baked light with textures off.
+inline auto ShowLightmapOnly = Preference<bool>{"Map view/Lightmap only", false};
 
 inline auto ShowSoftMapBounds = Preference<bool>{"Map view/Show soft map bounds", true};
 

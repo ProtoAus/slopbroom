@@ -990,6 +990,8 @@ void MapViewBase::renderContents(gl::Gl& gl)
     render::RenderContext{gl, renderMode(), camera(), fontManager(), shaderManager()};
   renderContext.setFilterMode(
     pref(Preferences::TextureMinFilter), pref(Preferences::TextureMagFilter));
+  renderContext.setAnisotropy(pref(Preferences::TextureAnisotropy) ? 16.0f : 1.0f);
+  renderContext.setLodBias(pref(Preferences::TextureLodBias));
   renderContext.setShowMaterials(
     pref(Preferences::FaceRenderMode) == Preferences::FaceRenderModeTextured);
   renderContext.setShowFaces(
@@ -1003,6 +1005,14 @@ void MapViewBase::renderContents(gl::Gl& gl)
   renderContext.setShowBrushEntityBounds(pref(Preferences::ShowBrushEntityBounds));
   renderContext.setShowPointEntityBounds(pref(Preferences::ShowPointEntityBounds));
   renderContext.setShowFog(pref(Preferences::ShowFog));
+  renderContext.setShowLightmapGrid(pref(Preferences::ShowLightmapGrid));
+  renderContext.setShowCompiledLighting(pref(Preferences::ShowCompiledLighting));
+  if (renderContext.showCompiledLighting())
+  {
+    // the lit preview replaces the live world faces; edges, selection and entities
+    // keep rendering so editing stays possible on top of it
+    renderContext.setShowFaces(false);
+  }
   renderContext.setShowGrid(grid.visible());
   renderContext.setGridSize(grid.actualSize());
   renderContext.setDpiScale(static_cast<float>(window()->devicePixelRatioF()));

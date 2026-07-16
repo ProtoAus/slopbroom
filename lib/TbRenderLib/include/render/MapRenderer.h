@@ -48,6 +48,7 @@ struct SelectionChange;
 
 namespace render
 {
+class CompiledBspRenderer;
 class EntityDecalRenderer;
 class EntityLinkRenderer;
 class GroupLinkRenderer;
@@ -66,6 +67,9 @@ private:
   std::unique_ptr<EntityDecalRenderer> m_entityDecalRenderer;
   std::unique_ptr<EntityLinkRenderer> m_entityLinkRenderer;
   std::unique_ptr<GroupLinkRenderer> m_groupLinkRenderer;
+  std::unique_ptr<CompiledBspRenderer> m_compiledBspRenderer;
+  std::filesystem::path m_compiledBspPath;
+  std::filesystem::file_time_type m_compiledBspTime;
 
   enum class Renderer
   {
@@ -103,6 +107,7 @@ private:
   void renderEntityDecals(RenderContext& renderContext, RenderBatch& renderBatch);
   void renderEntityLinks(RenderContext& renderContext, RenderBatch& renderBatch);
   void renderGroupLinks(RenderContext& renderContext, RenderBatch& renderBatch);
+  void renderCompiledBsp(RenderBatch& renderBatch);
 
   void setupRenderers();
   void setupDefaultRenderer(ObjectRenderer& renderer);

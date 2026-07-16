@@ -90,6 +90,26 @@ void RenderContext::setFilterMode(const int minFilter, const int magFilter)
   m_textureMagFilter = magFilter;
 }
 
+float RenderContext::anisotropy() const
+{
+  return m_textureAnisotropy;
+}
+
+void RenderContext::setAnisotropy(const float anisotropy)
+{
+  m_textureAnisotropy = anisotropy;
+}
+
+float RenderContext::lodBias() const
+{
+  return m_textureLodBias;
+}
+
+void RenderContext::setLodBias(const float lodBias)
+{
+  m_textureLodBias = lodBias;
+}
+
 bool RenderContext::showMaterials() const
 {
   return m_showMaterials;
@@ -198,6 +218,26 @@ bool RenderContext::showFog() const
 void RenderContext::setShowFog(const bool showFog)
 {
   m_showFog = showFog;
+}
+
+bool RenderContext::showLightmapGrid() const
+{
+  return m_showLightmapGrid;
+}
+
+void RenderContext::setShowLightmapGrid(const bool showLightmapGrid)
+{
+  m_showLightmapGrid = showLightmapGrid;
+}
+
+bool RenderContext::showCompiledLighting() const
+{
+  return m_showCompiledLighting;
+}
+
+void RenderContext::setShowCompiledLighting(const bool showCompiledLighting)
+{
+  m_showCompiledLighting = showCompiledLighting;
 }
 
 bool RenderContext::showGrid() const

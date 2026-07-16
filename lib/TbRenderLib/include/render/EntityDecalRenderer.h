@@ -21,6 +21,7 @@
 
 #include "Color.h"
 #include "gl/VertexType.h"
+#include "mdl/BrushRendererBrushCache.h"
 #include "render/AllocationTracker.h"
 #include "render/EdgeRenderer.h"
 #include "render/FaceRenderer.h"
@@ -72,7 +73,7 @@ private:
   mdl::Map& m_map;
   EntityWithDependenciesMap m_entities;
 
-  using Vertex = gl::VertexTypes::P3NT2::Vertex;
+  using Vertex = mdl::BrushRendererBrushCache::Vertex;
   using MaterialToBrushIndicesMap =
     std::unordered_map<const gl::Material*, std::shared_ptr<BrushIndexArray>>;
 

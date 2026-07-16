@@ -486,6 +486,17 @@ QWidget* ViewEditor::createRendererPanel(QWidget* parent)
   m_shadeFacesCheckBox = new QCheckBox{tr("Shade faces")};
   m_showFogCheckBox = new QCheckBox{tr("Use fog")};
   m_showEdgesCheckBox = new QCheckBox{tr("Show edges")};
+  m_showLightmapGridCheckBox = new QCheckBox{tr("Show lightmap grid")};
+  m_showLightmapGridCheckBox->setToolTip(tr(
+    "Overlay each face's lightmap luxel grid (from the _world_units_per_luxel key on "
+    "worldspawn / func_group / func_detail)."));
+  m_showCompiledLightingCheckBox = new QCheckBox{tr("Show compiled lighting")};
+  m_showCompiledLightingCheckBox->setToolTip(tr(
+    "Render the compiled <map>.bsp with its baked lightmaps in place of the live "
+    "world faces. Shows the LAST compile; recompile to refresh."));
+  m_lightmapOnlyCheckBox = new QCheckBox{tr("Lightmap only")};
+  m_lightmapOnlyCheckBox->setToolTip(
+    tr("Show the baked lighting on its own, with the textures turned off."));
 
 
   const auto EntityLinkModes = std::vector<std::tuple<QString, QString>>{
@@ -521,6 +532,21 @@ QWidget* ViewEditor::createRendererPanel(QWidget* parent)
     m_showFogCheckBox, &QAbstractButton::clicked, this, &ViewEditor::showFogChanged);
   connect(
     m_showEdgesCheckBox, &QAbstractButton::clicked, this, &ViewEditor::showEdgesChanged);
+  connect(
+    m_showLightmapGridCheckBox,
+    &QAbstractButton::clicked,
+    this,
+    &ViewEditor::showLightmapGridChanged);
+  connect(
+    m_showCompiledLightingCheckBox,
+    &QAbstractButton::clicked,
+    this,
+    &ViewEditor::showCompiledLightingChanged);
+  connect(
+    m_lightmapOnlyCheckBox,
+    &QAbstractButton::clicked,
+    this,
+    &ViewEditor::lightmapOnlyChanged);
 
   connect(
     m_renderModeRadioGroup,
@@ -556,6 +582,9 @@ QWidget* ViewEditor::createRendererPanel(QWidget* parent)
   layout->addWidget(m_shadeFacesCheckBox);
   layout->addWidget(m_showFogCheckBox);
   layout->addWidget(m_showEdgesCheckBox);
+  layout->addWidget(m_showLightmapGridCheckBox);
+  layout->addWidget(m_showCompiledLightingCheckBox);
+  layout->addWidget(m_lightmapOnlyCheckBox);
 
   for (auto* button : m_entityLinkRadioGroup->buttons())
   {
@@ -616,6 +645,11 @@ void ViewEditor::refreshRendererPanel()
   m_shadeFacesCheckBox->setChecked(pref(Preferences::ShadeFaces));
   m_showFogCheckBox->setChecked(pref(Preferences::ShowFog));
   m_showEdgesCheckBox->setChecked(pref(Preferences::ShowEdges));
+  m_showLightmapGridCheckBox->setChecked(pref(Preferences::ShowLightmapGrid));
+  m_showCompiledLightingCheckBox->setChecked(pref(Preferences::ShowCompiledLighting));
+  m_lightmapOnlyCheckBox->setChecked(pref(Preferences::ShowLightmapOnly));
+  // only meaningful while the compiled-lighting preview is up
+  m_lightmapOnlyCheckBox->setEnabled(pref(Preferences::ShowCompiledLighting));
   checkButtonInGroup(
     m_entityLinkRadioGroup,
     QString::fromStdString(pref(Preferences::EntityLinkMode)),
@@ -702,6 +736,22 @@ void ViewEditor::shadeFacesChanged(const bool checked)
 void ViewEditor::showFogChanged(const bool checked)
 {
   setPref(Preferences::ShowFog, checked);
+}
+
+void ViewEditor::showLightmapGridChanged(const bool checked)
+{
+  setPref(Preferences::ShowLightmapGrid, checked);
+}
+
+void ViewEditor::showCompiledLightingChanged(const bool checked)
+{
+  setPref(Preferences::ShowCompiledLighting, checked);
+  m_lightmapOnlyCheckBox->setEnabled(checked);
+}
+
+void ViewEditor::lightmapOnlyChanged(const bool checked)
+{
+  setPref(Preferences::ShowLightmapOnly, checked);
 }
 
 void ViewEditor::showEdgesChanged(const bool checked)

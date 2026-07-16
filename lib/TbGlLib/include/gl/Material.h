@@ -166,7 +166,12 @@ public:
   void incUsageCount() const;
   void decUsageCount() const;
 
-  void activate(Gl& gl, int minFilter, int magFilter) const;
+  void activate(
+    Gl& gl,
+    int minFilter,
+    int magFilter,
+    float anisotropy = 1.0f,
+    float lodBias = 0.0f) const;
   void deactivate(Gl& gl) const;
 };
 
