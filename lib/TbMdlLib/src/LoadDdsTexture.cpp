@@ -32,8 +32,40 @@
 #include <cstring>
 #include <vector>
 
+// bcdec is vendored third-party C; it does not compile clean under the project's strict
+// warning set (-Werror with old-style casts, sign conversions and unaligned casts, all of
+// which are ordinary style for a block-decoder written in C). Suppress those for the
+// implementation rather than patching upstream code we want to keep updatable.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wold-style-cast"
+#pragma clang diagnostic ignored "-Wcast-align"
+#pragma clang diagnostic ignored "-Wsign-conversion"
+#pragma clang diagnostic ignored "-Wconversion"
+#pragma clang diagnostic ignored "-Wunused-function"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#pragma GCC diagnostic ignored "-Wcast-align"
+#pragma GCC diagnostic ignored "-Wsign-conversion"
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4242) // conversion, possible loss of data
+#pragma warning(disable : 4244) // conversion, possible loss of data
+#pragma warning(disable : 4245) // signed/unsigned mismatch
+#pragma warning(disable : 4267) // size_t conversion, possible loss of data
+#endif
 #define BCDEC_IMPLEMENTATION
 #include "bcdec.h"
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 namespace tb::mdl
 {
