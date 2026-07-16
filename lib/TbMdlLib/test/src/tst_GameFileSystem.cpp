@@ -68,8 +68,10 @@ TEST_CASE("GameFileSystem")
     {
       "id1",
       {
-        {".pak"},
-        "idpak",
+        {
+          {".pak"},
+          "idpak",
+        },
       },
     },
     {},
@@ -133,8 +135,10 @@ TEST_CASE("GameFileSystem")
       {
         "ID1",
         {
-          {".pak"},
-          "idpak",
+          {
+            {".pak"},
+            "idpak",
+          },
         },
       },
       {},

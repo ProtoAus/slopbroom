@@ -66,10 +66,10 @@ const auto FilterModes = std::array<FilterMode, 2>{
   FilterMode{GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, "Bilinear"},
 };
 
-std::optional<size_t> findFilterMode(const int minFilter, const int magFilter)
+// Matches on the mag filter alone (the crisp-vs-smooth choice), which also means a min
+// filter stored by the older 6-preset combo still resolves to one of these two.
+std::optional<size_t> findFilterMode(const int magFilter)
 {
-  // match on the mag filter (the crisp-vs-smooth choice); tolerates any stored min value
-  // from an older 6-preset config.
   return kdl::index_of(FilterModes, [&](const FilterMode& filterMode) {
     return filterMode.magFilter == magFilter;
   });
@@ -405,9 +405,8 @@ void ViewPreferencePane::updateControls()
   m_fovSlider->setValue(int(prefs.getPendingValue(Preferences::CameraFov)));
 
   if (
-    const auto filterModeIndex = findFilterMode(
-      prefs.getPendingValue(Preferences::TextureMinFilter),
-      prefs.getPendingValue(Preferences::TextureMagFilter)))
+    const auto filterModeIndex =
+      findFilterMode(prefs.getPendingValue(Preferences::TextureMagFilter)))
   {
     m_filterModeCombo->setCurrentIndex(int(*filterModeIndex));
   }

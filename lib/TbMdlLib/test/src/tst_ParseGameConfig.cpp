@@ -142,7 +142,7 @@ TEST_CASE("GameConfigParser")
         {// map formats
          mdl::MapFormatConfig{"Standard", {}},
          mdl::MapFormatConfig{"Valve", {}}},
-        mdl::FileSystemConfig{{"id1"}, mdl::PackageFormatConfig{{".pak"}, "idpak"}},
+        mdl::FileSystemConfig{{"id1"}, {mdl::PackageFormatConfig{{".pak"}, "idpak"}}},
         mdl::MaterialConfig{
           {"textures"},
           {".D"},
@@ -401,7 +401,7 @@ TEST_CASE("GameConfigParser")
         {"Icon.png"},
         false,
         {mdl::MapFormatConfig{"Quake2", {}}},
-        mdl::FileSystemConfig{{"baseq2"}, mdl::PackageFormatConfig{{".pak"}, "idpak"}},
+        mdl::FileSystemConfig{{"baseq2"}, {mdl::PackageFormatConfig{{".pak"}, "idpak"}}},
         mdl::MaterialConfig{
           {"textures"},
           {".wal"},
@@ -731,7 +731,7 @@ TEST_CASE("GameConfigParser")
         {},
         false,
         {mdl::MapFormatConfig{"Quake3", {}}},
-        mdl::FileSystemConfig{{"baseq3"}, mdl::PackageFormatConfig{{".pk3"}, "zip"}},
+        mdl::FileSystemConfig{{"baseq3"}, {mdl::PackageFormatConfig{{".pk3"}, "zip"}}},
         mdl::MaterialConfig{
           {"textures"},
           {""},
@@ -915,7 +915,7 @@ TEST_CASE("GameConfigParser")
         {"Icon.png"},
         false,
         {mdl::MapFormatConfig{"Standard", {}}},
-        mdl::FileSystemConfig{{"id1"}, mdl::PackageFormatConfig{{".pak"}, "idpak"}},
+        mdl::FileSystemConfig{{"id1"}, {mdl::PackageFormatConfig{{".pak"}, "idpak"}}},
         mdl::MaterialConfig{
           {"textures"},
           {".D"},
