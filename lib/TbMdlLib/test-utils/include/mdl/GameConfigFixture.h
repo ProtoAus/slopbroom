@@ -72,7 +72,7 @@ inline const GameInfo QuakeGameInfo = detail::makeGameInfoFixture(
     .fileSystemConfig =
       {
         .searchPath = "id1",
-        .packageFormat = {.extensions = {".pak"}, .format = "idpak"},
+        .packageFormats = {{.extensions = {".pak"}, .format = "idpak"}},
       },
     .materialConfig =
       {
@@ -111,7 +111,7 @@ inline const GameInfo Quake2GameInfo = detail::makeGameInfoFixture(
     .fileSystemConfig =
       {
         .searchPath = "baseq2",
-        .packageFormat = {.extensions = {".pak"}, .format = "idpak"},
+        .packageFormats = {{.extensions = {".pak"}, .format = "idpak"}},
       },
     .materialConfig =
       {

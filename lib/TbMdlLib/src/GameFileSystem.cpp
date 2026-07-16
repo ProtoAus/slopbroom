@@ -162,38 +162,41 @@ void GameFileSystem::addFileSystemPackages(
   const GameConfig& config, const std::filesystem::path& searchPath, Logger& logger)
 {
   const auto& fileSystemConfig = config.fileSystemConfig;
-  const auto& packageFormatConfig = fileSystemConfig.packageFormat;
-
-  const auto& packageExtensions = packageFormatConfig.extensions;
-  const auto& packageFormat = packageFormatConfig.format;
 
   if (fs::Disk::pathInfo(searchPath) == fs::PathInfo::Directory)
   {
     const auto diskFS = fs::DiskFileSystem{searchPath};
-    diskFS.find(
-      std::filesystem::path{},
-      fs::TraversalMode::Flat,
-      fs::makeExtensionPathMatcher(packageExtensions))
-      | kdl::and_then([&](auto packagePaths) {
-          std::ranges::sort(packagePaths);
-          return packagePaths | kdl::views::as_rvalue
-                 | std::views::transform([&](auto packagePath) {
-                     return diskFS.makeAbsolute(packagePath)
-                            | kdl::and_then([&](const auto& absPackagePath) {
-                                return createImageFileSystem(
-                                  packageFormat, absPackagePath);
-                              })
-                            | kdl::transform([&](auto fs) {
-                                logger.info()
-                                  << "Adding file system package " << packagePath;
-                                mount("", std::move(fs));
-                              });
-                   })
-                 | kdl::fold;
-        })
-      | kdl::transform_error([&](auto e) {
-          logger.error() << "Could not add file system packages: " << e.msg;
-        });
+    // A game may declare several package formats (e.g. Quake: .pak/idpak plus .pk3/zip);
+    // mount each matching archive with its own reader.
+    for (const auto& packageFormatConfig : fileSystemConfig.packageFormats)
+    {
+      const auto& packageExtensions = packageFormatConfig.extensions;
+      const auto& packageFormat = packageFormatConfig.format;
+      diskFS.find(
+        std::filesystem::path{},
+        fs::TraversalMode::Flat,
+        fs::makeExtensionPathMatcher(packageExtensions))
+        | kdl::and_then([&](auto packagePaths) {
+            std::ranges::sort(packagePaths);
+            return packagePaths | kdl::views::as_rvalue
+                   | std::views::transform([&](auto packagePath) {
+                       return diskFS.makeAbsolute(packagePath)
+                              | kdl::and_then([&](const auto& absPackagePath) {
+                                  return createImageFileSystem(
+                                    packageFormat, absPackagePath);
+                                })
+                              | kdl::transform([&](auto fs) {
+                                  logger.info()
+                                    << "Adding file system package " << packagePath;
+                                  mount("", std::move(fs));
+                                });
+                     })
+                   | kdl::fold;
+          })
+        | kdl::transform_error([&](auto e) {
+            logger.error() << "Could not add file system packages: " << e.msg;
+          });
+    }
   }
 }
 

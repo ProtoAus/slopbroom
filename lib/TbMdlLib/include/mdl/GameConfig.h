@@ -56,9 +56,9 @@ struct PackageFormatConfig
 struct FileSystemConfig
 {
   std::filesystem::path searchPath;
-  PackageFormatConfig packageFormat;
+  std::vector<PackageFormatConfig> packageFormats;
 
-  kdl_reflect_decl(FileSystemConfig, searchPath, packageFormat);
+  kdl_reflect_decl(FileSystemConfig, searchPath, packageFormats);
 };
 
 struct MaterialConfig

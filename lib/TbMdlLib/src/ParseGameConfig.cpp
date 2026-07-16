@@ -500,9 +500,23 @@ MaterialConfig parseMaterialConfig(
 FileSystemConfig parseFileSystemConfig(
   const el::EvaluationContext& context, const el::Value& value)
 {
+  const auto packageFormatValue = value.at(context, "packageformat");
+  auto packageFormats = std::vector<PackageFormatConfig>{};
+  if (packageFormatValue.type() == el::ValueType::Array)
+  {
+    // A game may declare several package formats (e.g. Quake: .pak/idpak + .pk3/zip).
+    for (const auto& entry : packageFormatValue.arrayValue(context))
+    {
+      packageFormats.push_back(parsePackageFormatConfig(context, entry));
+    }
+  }
+  else
+  {
+    packageFormats.push_back(parsePackageFormatConfig(context, packageFormatValue));
+  }
   return FileSystemConfig{
     std::filesystem::path{value.at(context, "searchpath").stringValue(context)},
-    parsePackageFormatConfig(context, value.at(context, "packageformat")),
+    std::move(packageFormats),
   };
 }
 

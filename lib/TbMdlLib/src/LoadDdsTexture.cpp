@@ -28,6 +28,13 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
+#include <cstring>
+#include <vector>
+
+#define BCDEC_IMPLEMENTATION
+#include "bcdec.h"
+
 namespace tb::mdl
 {
 namespace
@@ -82,6 +89,9 @@ const std::size_t DxgiFormatB8G8R8A8Typeless = 90;
 const std::size_t DxgiFormatB8G8R8A8UnormSrgb = 91;
 const std::size_t DxgiFormatB8G8R8X8Typeless = 92;
 const std::size_t DxgiFormatB8G8R8X8UnormSrgb = 93;
+const std::size_t DxgiFormatBC7Typeless = 97;
+const std::size_t DxgiFormatBC7Unorm = 98;
+const std::size_t DxgiFormatBC7UnormSrgb = 99;
 } // namespace DdsLayout
 
 GLenum convertDx10FormatToGLFormat(const size_t dx10Format)
@@ -122,6 +132,41 @@ void readDdsMips(fs::Reader& reader, gl::TextureBufferList& buffers)
   for (size_t i = 0, mipLevels = buffers.size(); i < mipLevels; ++i)
   {
     reader.read(buffers[i].data(), buffers[i].size());
+  }
+}
+
+// GL 2.1 has no BPTC, so BC7 can't be GPU-uploaded compressed like DXT1/3/5 -- CPU-decode the
+// BC7 blocks into the (already GL_RGBA-sized) mip buffers via bcdec (single-header, same
+// author as this loader). Edge blocks past the mip extent are decoded into a temp and clipped.
+void decodeBc7Mips(
+  fs::Reader& reader, gl::TextureBufferList& buffers, size_t width, size_t height)
+{
+  for (size_t i = 0, mipLevels = buffers.size(); i < mipLevels; ++i)
+  {
+    const size_t mw = std::max<size_t>(1, width >> i);
+    const size_t mh = std::max<size_t>(1, height >> i);
+    const size_t blocksX = (mw + 3) / 4;
+    const size_t blocksY = (mh + 3) / 4;
+    auto compressed = std::vector<unsigned char>(blocksX * blocksY * BCDEC_BC7_BLOCK_SIZE);
+    reader.read(compressed.data(), compressed.size());
+
+    unsigned char* dst = buffers[i].data();
+    const size_t pitch = mw * 4;
+    for (size_t by = 0; by < blocksY; ++by)
+    {
+      for (size_t bx = 0; bx < blocksX; ++bx)
+      {
+        unsigned char block[4 * 4 * 4];
+        bcdec_bc7(
+          compressed.data() + (by * blocksX + bx) * BCDEC_BC7_BLOCK_SIZE, block, 4 * 4);
+        for (size_t ry = 0; ry < 4 && (by * 4 + ry) < mh; ++ry)
+        {
+          const size_t px = bx * 4;
+          const size_t rowBytes = std::min<size_t>(4, mw - px) * 4;
+          std::memcpy(dst + (by * 4 + ry) * pitch + px * 4, block + ry * 16, rowBytes);
+        }
+      }
+    }
   }
 }
 
@@ -173,6 +218,7 @@ Result<gl::Texture> loadDdsTexture(fs::Reader& reader)
     const auto dx10MiscFlags = isDx10File ? reader.readSize<uint32_t>() : 0;
 
     auto format = GLenum{0};
+    auto isBc7 = false;
 
     if (isDx10File)
     {
@@ -182,7 +228,11 @@ Result<gl::Texture> loadDdsTexture(fs::Reader& reader)
       {
         reader.seekFromBegin(
           DdsLayout::BasicHeaderLengthWithIdent + DdsLayout::Dx10HeaderLength);
-        format = convertDx10FormatToGLFormat(dx10Format);
+        isBc7 = dx10Format == DdsLayout::DxgiFormatBC7Typeless
+                || dx10Format == DdsLayout::DxgiFormatBC7Unorm
+                || dx10Format == DdsLayout::DxgiFormatBC7UnormSrgb;
+        // BC7 (BPTC) has no GL 2.1 compressed upload path -> decode to RGBA (below).
+        format = isBc7 ? GLenum(GL_RGBA) : convertDx10FormatToGLFormat(dx10Format);
       }
     }
     else
@@ -247,7 +297,14 @@ Result<gl::Texture> loadDdsTexture(fs::Reader& reader)
     auto buffers = gl::TextureBufferList{numMips};
 
     setMipBufferSize(buffers, numMips, width, height, format);
-    readDdsMips(reader, buffers);
+    if (isBc7)
+    {
+      decodeBc7Mips(reader, buffers, width, height);
+    }
+    else
+    {
+      readDdsMips(reader, buffers);
+    }
 
     return gl::Texture{
       width,

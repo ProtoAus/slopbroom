@@ -36,6 +36,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -130,8 +131,13 @@ Result<gl::Texture> loadFreeImageTextureFromMemory(
       return Error{"Unknown image format"};
     }
 
+    // PNG_IGNOREGAMMA: a PNG gAMA/iCCP chunk would make FreeImage rescale the pixels,
+    // showing the texture brighter in the editor than the engine renders it. Decode
+    // raw so the editor always matches the file bytes.
     auto image = kdl::resource{
-      FreeImage_LoadFromMemory(imageFormat, *imageMemory), FreeImage_Unload};
+      FreeImage_LoadFromMemory(
+        imageFormat, *imageMemory, imageFormat == FIF_PNG ? PNG_IGNOREGAMMA : 0),
+      FreeImage_Unload};
 
     if (!image)
     {
@@ -150,7 +156,18 @@ Result<gl::Texture> loadFreeImageTextureFromMemory(
     // This is supposed to indicate whether any pixels are transparent (alpha < 100%)
     const auto masked = FreeImage_IsTransparent(*image);
 
-    constexpr auto mipCount = 1u;
+    // Opaque textures get a full mipmap chain (CPU-generated below, since GL 2.1 has no
+    // glGenerateMipmap here) so distant/oblique surfaces don't shimmer and anisotropic
+    // filtering can engage. Masked/alpha-tested textures stay a single level so their
+    // cutout edges don't erode with distance.
+    auto mipCount = size_t{1};
+    if (!masked)
+    {
+      for (auto d = std::max(imageWidth, imageHeight); d > 1; d /= 2)
+      {
+        ++mipCount;
+      }
+    }
     constexpr auto format = freeImage32BPPFormatToGLFormat();
 
     auto buffers = gl::TextureBufferList{mipCount};
@@ -183,6 +200,27 @@ Result<gl::Texture> loadFreeImageTextureFromMemory(
       FI_RGBA_BLUE_MASK,
       TRUE);
 
+    // Downsample level 0 into the remaining mip levels (FreeImage bilinear).
+    for (size_t level = 1; level < mipCount; ++level)
+    {
+      const auto mipSize = gl::sizeAtMipLevel(imageWidth, imageHeight, level);
+      auto scaled = kdl::resource{
+        FreeImage_Rescale(*image, int(mipSize.x()), int(mipSize.y()), FILTER_BILINEAR),
+        FreeImage_Unload};
+      if (!scaled)
+      {
+        return Error{"Failed to generate texture mipmaps"};
+      }
+      FreeImage_ConvertToRawBits(
+        buffers.at(level).data(),
+        *scaled,
+        int(mipSize.x() * 4),
+        32,
+        FI_RGBA_RED_MASK,
+        FI_RGBA_GREEN_MASK,
+        FI_RGBA_BLUE_MASK,
+        TRUE);
+    }
 
     const auto textureMask = masked ? gl::TextureMask::On : gl::TextureMask::Off;
     const auto averageColor = getAverageColor(buffers.at(0), format);

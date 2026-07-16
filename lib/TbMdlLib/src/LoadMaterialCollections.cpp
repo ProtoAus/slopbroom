@@ -87,9 +87,14 @@ bool shouldExclude(
 Result<std::vector<std::filesystem::path>> findTexturePaths(
   const fs::FileSystem& fs, const MaterialConfig& materialConfig)
 {
+  // Wad-based games (materials "attribute": "wad" — Quake/Half-Life/Hexen2) treat the
+  // material root as one flat namespace: wad lumps mount directly under it, and loose
+  // files in subdirectories would otherwise each spawn their own browser collection.
+  // Directory-collection games (no wad attribute) still need the recursive scan.
   return fs.find(
            materialConfig.root,
-           fs::TraversalMode::Recursive,
+           materialConfig.property ? fs::TraversalMode::Flat
+                                   : fs::TraversalMode::Recursive,
            fs::makeExtensionPathMatcher(materialConfig.extensions))
          | kdl::transform([&](auto paths) {
              return paths | std::views::filter([&](const auto& path) {
@@ -107,13 +112,32 @@ Result<std::vector<std::filesystem::path>> findAllMaterialPaths(
 {
   return findTexturePaths(fs, materialConfig)
          | kdl::transform([&](const auto& texturePaths) {
+             // When two files share a stem, the winner must be the format listed
+             // earliest in the game config's extension list, not whichever the
+             // filesystem happened to enumerate last. Quake mods ship a loose
+             // true-color textures/<name>.png AND pack the same name into a .wad
+             // for qbsp; enumeration order let the mounted wads swallow the whole
+             // loose "textures" directory collection.
+             const auto extensionRank = [&](const std::filesystem::path& path) {
+               const auto ext = kdl::path_to_lower(path.extension());
+               const auto it = std::ranges::find_if(
+                 materialConfig.extensions, [&](const auto& candidate) {
+                   return kdl::path_to_lower(candidate) == ext;
+                 });
+               return std::distance(materialConfig.extensions.begin(), it);
+             };
              auto pathStemToPath = std::unordered_map<
                std::filesystem::path,
                std::filesystem::path,
                kdl::path_hash>{};
              for (const auto& texturePath : texturePaths)
              {
-               pathStemToPath[kdl::path_remove_extension(texturePath)] = texturePath;
+               const auto [it, inserted] = pathStemToPath.try_emplace(
+                 kdl::path_remove_extension(texturePath), texturePath);
+               if (!inserted && extensionRank(texturePath) < extensionRank(it->second))
+               {
+                 it->second = texturePath;
+               }
              }
              for (const auto& shader : shaders)
              {
