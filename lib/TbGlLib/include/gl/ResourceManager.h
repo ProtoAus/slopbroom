@@ -46,6 +46,8 @@ public:
 
   virtual bool isDropped() const = 0;
   virtual bool needsProcessing() const = 0;
+  virtual bool isUnloaded() const = 0;
+  virtual bool isInFlight() const = 0;
 
   virtual void drop() = 0;
   virtual bool process(TaskRunner taskRunner, const ProcessContext& processContext) = 0;
@@ -69,6 +71,8 @@ public:
   long useCount() const override { return m_resource.use_count(); }
   bool isDropped() const override { return m_resource->isDropped(); }
   bool needsProcessing() const override { return m_resource->needsProcessing(); }
+  bool isUnloaded() const override { return m_resource->isUnloaded(); }
+  bool isInFlight() const override { return m_resource->isInFlight(); }
   void drop() override { m_resource->drop(); }
   bool process(TaskRunner taskRunner, const ProcessContext& processContext) override
   {
@@ -129,6 +133,20 @@ public:
 
     auto processedResourceIds = std::vector<ResourceId>{};
 
+    // Bound how many textures are decoded-but-not-yet-uploaded at any moment. Decode runs
+    // on a worker-thread pool while the GPU upload that frees the decoded buffer is serial
+    // and time-sliced, so without a cap the parallel decoders race ahead of the uploader
+    // and pile up gigabytes of RGBA — a large texture folder spiked system RAM to many GB
+    // on open before uploads caught up. Each in-flight resource holds a full decoded buffer
+    // set (level 0 + mips) until upload, so this cap is the load-time memory ceiling; the
+    // uploader stays fed (there is always something to upload) so total load time is
+    // unchanged. Held-back resources are retriggered on later ticks as uploads free room.
+    constexpr auto maxResourcesInFlight = std::size_t{32};
+    auto inFlight = std::size_t(std::ranges::count_if(
+      m_resources, [](const auto& resourceWrapper) {
+        return resourceWrapper->isInFlight();
+      }));
+
     for (auto it = m_resources.begin(); it != m_resources.end() && checkTimeout();)
     {
       auto& resourceWrapper = *it;
@@ -137,11 +155,23 @@ public:
         resourceWrapper->drop();
       }
 
-      if (resourceWrapper->needsProcessing())
+      if (
+        resourceWrapper->needsProcessing()
+        && !(resourceWrapper->isUnloaded() && inFlight >= maxResourcesInFlight))
       {
+        const auto wasInFlight = resourceWrapper->isInFlight();
         if (resourceWrapper->process(taskRunner, processContext))
         {
           processedResourceIds.push_back(resourceWrapper->id());
+        }
+        const auto nowInFlight = resourceWrapper->isInFlight();
+        if (nowInFlight && !wasInFlight)
+        {
+          ++inFlight;
+        }
+        else if (!nowInFlight && wasInFlight)
+        {
+          --inFlight;
         }
       }
 

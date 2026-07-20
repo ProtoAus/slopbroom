@@ -276,6 +276,20 @@ public:
            && !std::holds_alternative<ResourceFailed>(m_state);
   }
 
+  // Processing this resource would kick off a (memory-allocating) decode task.
+  bool isUnloaded() const
+  {
+    return std::holds_alternative<ResourceUnloaded<T>>(m_state);
+  }
+
+  // The resource has a decode in flight or a decoded-but-not-yet-uploaded buffer set held
+  // in memory. This is what upload frees, so it is the quantity to bound.
+  bool isInFlight() const
+  {
+    return std::holds_alternative<ResourceLoading<T>>(m_state)
+           || std::holds_alternative<ResourceLoaded<T>>(m_state);
+  }
+
   bool process(TaskRunner taskRunner, const ProcessContext& context)
   {
     const auto previousStateIndex = m_state.index();
